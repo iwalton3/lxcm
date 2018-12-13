@@ -18,8 +18,11 @@ fi
 function install {
     if [[ -e "/usr/bin/lxcm" ]]
     then
-        echo "lxcm is already installed!"
-        exit 1
+        cp "$scriptName" /usr/bin/lxcm
+        chmod 755 /usr/bin/lxcm
+        chown root:root /usr/bin/lxcm
+        echo "Updated lxcm."
+        exit 0
     fi
     cp "$scriptName" /usr/bin/lxcm
     chmod 755 /usr/bin/lxcm
