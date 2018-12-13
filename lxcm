@@ -171,6 +171,39 @@ function list-templates {
     ls $lxcmHome/templates/ | sed 's/.sfs$//g' | sort -u
 }
 
+function checkIdMap {
+    #[type = subgid/subuid] [offset]
+    offset="$2"
+    id=$((offset*100000))
+    idend=$((id+65536))
+    while read -r line
+    do
+        {
+            read -rd : user
+            read -rd : start
+            read -r count
+        } <<< "$line"
+        if ((idend > start)) && ((id < start+count))
+        then
+            #echo "Mapping $id-$((idend-1)) overlaps with $line."
+            return 1
+        fi
+    done < /etc/$1
+}
+
+function findNextsNum {
+    sNumMin=2
+    sNumMax=254
+    for i in $(seq "$sNumMin" "$sNumMax")
+    do
+        checkIdMap subgid $i || continue
+        checkIdMap subuid $i || continue
+        echo "$i"
+        return
+    done
+    echo fail
+}
+
 function new {
     #TEMPLATE CONTAINER
     if [[ -e "$lxcmHome/containers/$2" ]]
@@ -183,13 +216,13 @@ function new {
         echo "Template does not exist."
         exit 1
     fi
-    if [[ ! -e "$lxcmHome/seq" ]]
+    sNum=$(findNextsNum)
+    if [[ "$sNum" == "fail" ]]
     then
-        sNum=20
-    else
-        sNum=$(cat "$lxcmHome/seq")
+        echo "You have created too many containers!"
+        echo "Please delete some containers and try again."
+        exit 1
     fi
-    echo "$((sNum+1))" > "$lxcmHome/seq"
     mkdir -p "$lxcmHome/containers/$2"
     echo "$sNum" > "$lxcmHome/containers/$2/sNum"
     mkdir -p "$lxcmHome/containers/$2/backups"
@@ -684,6 +717,11 @@ function destroy-container {
     stop "$1"
     unmount-filesystem "$1" 2>/dev/null
     lxc-destroy -n "$1"
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    grep -vF "root:${sNum}00000:65536" /etc/subgid > /etc/subgid.lxcm-temp
+    mv /etc/subgid.lxcm-temp /etc/subgid
+    grep -vF "root:${sNum}00000:65536" /etc/subuid > /etc/subuid.lxcm-temp
+    mv /etc/subuid.lxcm-temp /etc/subuid
     rm -r "$lxcmHome/containers/$1/"
 }
 
