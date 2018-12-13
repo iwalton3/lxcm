@@ -35,6 +35,10 @@ iface lxc-bridge-nat inet static
    up iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
    down iptables -t nat -D POSTROUTING -o $iface -j MASQUERADE
    post-up echo 1 > /proc/sys/net/ipv4/ip_forward" > /etc/network/interfaces.d/lxc-bridge-nat
+    if ! grep -qF "Enable interfaces.d added by lxcm." /etc/network/interfaces
+    then
+        echo -e "\n# Enable interfaces.d added by lxcm.\nsource /etc/network/interfaces.d/*\n" >> /etc/network/interfaces
+    fi
     /etc/init.d/networking restart
     cat /etc/network/interfaces | grep iface | grep -v lxc-bridge-nat | grep -v ' lo ' | cut -d ' ' -f 2 | while read ifen
     do
