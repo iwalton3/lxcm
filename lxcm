@@ -895,12 +895,15 @@ where ACTION is:
     new TEMPLATE CONTAINER - Create a container from a template.
     start CONTAINER - Start specified container.
     stop CONTAINER - Stop specified container.
+    restart CONTAINER - Restart the specified container.
     edit-startup CONTAINER - Edit container startup.
     shell CONTAINER - Open a shell in container.
     safe-shell CONTAINER - Open shell without bash configs. (Not needed after clean.)
     execute CONTAINER COMMAND PARAMS... - Execute command in container.
     clean CONTAINER - Remove un-needed functionality for increased security.
     ipt CONTAINER PARAMS... - Execute iptables in container. (Changes don't persist.)
+    get container-path [local-path] - Copy file from container.
+    put container-path [local-path] - Copy file to container.
     destroy-container - Delete a container.
     list-containers - List all containers.
 
