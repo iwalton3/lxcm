@@ -269,11 +269,22 @@ function mount-filesystem {
     bindfs -o suid,dev,nonempty --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$1/mnt" "/var/lib/lxc/$1/rootfs/mnt"
 }
 
+function restart {
+    #CONTAINER
+    stop "$1"
+    start "$1"
+}
+
 function start {
     #CONTAINER
     if ! [[ -e "$lxcmHome/containers/$1" ]]
     then
         echo "Container does not exist."
+        exit 1
+    fi
+    if grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        echo "Container $1 is already running!"
         exit 1
     fi
     stop "$1"
@@ -825,7 +836,7 @@ function scrub {
 
 action="$1"
 shift
-if [[ "$action" =~ (install|migrate|delete|template|compress|new|start|stop|edit-startup|shell|forward|backup|restore|scrub|list-[fctb]|safe-shell|execute|clean|ipt|fw|force-restore|destroy-[ct]|compose) ]]
+if [[ "$action" =~ (install|migrate|delete|template|compress|new|start|stop|restart|edit-startup|shell|forward|backup|restore|scrub|list-[fctb]|safe-shell|execute|clean|ipt|fw|force-restore|destroy-[ct]|compose) ]]
 then
     "$action" "$@"
 else
