@@ -903,7 +903,7 @@ function delete {
 
 function list-backups {
     #CONTAINER
-    ls "$lxcmHome/containers/$1/backups/"
+    ls "$lxcmHome/containers/$1/backups/" | sed 's/.sfs$//g'
 }
 
 function scrub {
