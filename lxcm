@@ -663,7 +663,7 @@ function put {
         copyTo="$3"
     fi
 
-    filename=$(basename "$1")
+    filename=$(basename "$2")
     cp -r "$2" "$lxcmHome/containers/$1/mnt/"
     mv "/var/lib/lxc/$1/rootfs/mnt/$filename" "/var/lib/lxc/$1/rootfs/$copyTo"
 }
@@ -682,7 +682,7 @@ function get {
         copyTo="$3"
     fi
 
-    filename=$(basename "$1")
+    filename=$(basename "$2")
     cp -r "/var/lib/lxc/$1/rootfs/$2" "/var/lib/lxc/$1/rootfs/mnt/"
     mv "$lxcmHome/containers/$1/mnt/$filename" "$copyTo" 
 }
