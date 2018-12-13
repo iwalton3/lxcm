@@ -63,6 +63,7 @@ function template {
     fi
     lxc-create -B dir -n lxcm-temp-create -t "$1" || exit 1
     mv "/var/lib/lxc/lxcm-temp-create/rootfs" "$lxcmHome/templates/$2"
+    mkdir "/var/lib/lxc/lxcm-temp-create/rootfs"
     lxc-destroy -n lxcm-temp-create
 }
 
