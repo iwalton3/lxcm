@@ -639,6 +639,54 @@ function execute {
     lxc-attach -n "$container" --clear-env -- "$@"
 }
 
+function checkContainerStarted {
+    #CONTAINER
+    if grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        return
+    else
+        return 1
+    fi
+}
+
+function put {
+    #CONTAINER LOCAL-PATH [CONTANER-PATH]    
+    if ! checkContainerStarted "$1"
+    then
+        echo "Container must be running to copy files."
+        exit 1
+    fi
+    if [[ "$3" == "" ]]
+    then
+        copyTo="/"
+    else
+        copyTo="$3"
+    fi
+
+    filename=$(basename "$1")
+    cp -r "$2" "$lxcmHome/containers/$1/mnt/"
+    mv "/var/lib/lxc/$1/rootfs/mnt/$filename" "/var/lib/lxc/$1/rootfs/$copyTo"
+}
+
+function get {
+    #CONTAINER CONTANER-PATH [LOCAL-PATH]
+    if ! checkContainerStarted "$1"
+    then
+        echo "Container must be running to copy files."
+        exit 1
+    fi
+    if [[ "$3" == "" ]]
+    then
+        copyTo="./"
+    else
+        copyTo="$3"
+    fi
+
+    filename=$(basename "$1")
+    cp -r "/var/lib/lxc/$1/rootfs/$2" "/var/lib/lxc/$1/rootfs/mnt/"
+    mv "$lxcmHome/containers/$1/mnt/$filename" "$copyTo" 
+}
+
 function check-template-op {
     #check-template-op TEMPLATE OPERATION
     ctcount=0
@@ -874,7 +922,7 @@ function scrub {
 
 action="$1"
 shift
-if [[ "$action" =~ (install|migrate|delete|template|compress|new|start|stop|restart|edit-startup|shell|forward|backup|restore|scrub|list-[fctb]|safe-shell|execute|clean|ipt|fw|force-restore|destroy-[ct]|compose) ]]
+if [[ "$(type "$action")" =~ function ]]
 then
     "$action" "$@"
 else
@@ -902,8 +950,8 @@ where ACTION is:
     execute CONTAINER COMMAND PARAMS... - Execute command in container.
     clean CONTAINER - Remove un-needed functionality for increased security.
     ipt CONTAINER PARAMS... - Execute iptables in container. (Changes don't persist.)
-    get container-path [local-path] - Copy file from container.
-    put container-path [local-path] - Copy file to container.
+    get CONTAINER CONTANER-PATH [LOCAL-PATH] - Copy file from container.
+    put CONTAINER LOCAL-PATH [CONTANER-PATH] - Copy file to container.
     destroy-container - Delete a container.
     list-containers - List all containers.
 
