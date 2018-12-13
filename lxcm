@@ -16,14 +16,6 @@ then
 fi
 
 function install {
-    if [[ -e "/usr/bin/lxcm" ]]
-    then
-        cp "$scriptName" /usr/bin/lxcm
-        chmod 755 /usr/bin/lxcm
-        chown root:root /usr/bin/lxcm
-        echo "Updated lxcm."
-        exit 0
-    fi
     cp "$scriptName" /usr/bin/lxcm
     chmod 755 /usr/bin/lxcm
     chown root:root /usr/bin/lxcm
@@ -31,7 +23,7 @@ function install {
     mkdir -p "$lxcmHome/templates/"
     chmod 700 "$lxcmHome"
     mkdir -p "$lxcmHome/containers/"
-    > "/var/lib/lxcm/forwards"
+    touch "/var/lib/lxcm/forwards"
     echo "auto lxc-bridge-nat
 iface lxc-bridge-nat inet static  
    bridge_ports none
@@ -42,7 +34,7 @@ iface lxc-bridge-nat inet static
    netmask 255.255.255.0
    up iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
    down iptables -t nat -D POSTROUTING -o $iface -j MASQUERADE
-   post-up echo 1 > /proc/sys/net/ipv4/ip_forward" >> /etc/network/interfaces
+   post-up echo 1 > /proc/sys/net/ipv4/ip_forward" > /etc/network/interfaces.d/lxc-bridge-nat
     /etc/init.d/networking restart
     cat /etc/network/interfaces | grep iface | grep -v lxc-bridge-nat | grep -v ' lo ' | cut -d ' ' -f 2 | while read ifen
     do
