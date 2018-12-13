@@ -1,0 +1,883 @@
+#!/bin/bash
+scriptName="$0"
+# This tool was created by Ian Walton.
+iface=$(ip route | grep default | sed 's/.*dev \([0-9a-z]*\) .*/\1/g' | head -n 1)
+ip=$(ip addr show "$iface" | grep 'inet ' | tr -s ' /' ' ' | cut -f 3 -d ' ')
+lxcmHome="/var/lib/lxcm"
+filterBetweenContainers="true"
+if [[ "$EDITOR" == "" ]]
+then
+    EDITOR="vim"
+fi
+
+if [[ -e "$lxcmHome/containers/seq" ]]
+then
+    mv "$lxcmHome/containers/seq" "$lxcmHome/seq"
+fi
+
+function install {
+    if [[ -e "/usr/bin/lxcm" ]]
+    then
+        echo "lxcm is already installed!"
+        exit 1
+    fi
+    cp "$scriptName" /usr/bin/lxcm
+    chmod 755 /usr/bin/lxcm
+    chown root:root /usr/bin/lxcm
+    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim
+    mkdir -p "$lxcmHome/templates/"
+    chmod 700 "$lxcmHome"
+    mkdir -p "$lxcmHome/containers/"
+    > "/var/lib/lxcm/forwards"
+    echo "auto lxc-bridge-nat
+iface lxc-bridge-nat inet static  
+   bridge_ports none
+   bridge_fd 0
+   bridge_maxwait 0
+   bridge_stp off
+   address 192.168.100.1
+   netmask 255.255.255.0
+   up iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
+   down iptables -t nat -D POSTROUTING -o $iface -j MASQUERADE
+   post-up echo 1 > /proc/sys/net/ipv4/ip_forward" >> /etc/network/interfaces
+    /etc/init.d/networking restart
+    cat /etc/network/interfaces | grep iface | grep -v lxc-bridge-nat | grep -v ' lo ' | cut -d ' ' -f 2 | while read ifen
+    do
+        ifup "$ifen"
+    done
+}
+
+function migrate {
+    #HOST TEMPLATE
+    if [[ -e "$lxcmHome/templates/$1" || -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        echo "Template already exists."
+        exit 1
+    fi
+    mkdir -p "$lxcmHome/templates/$2"
+    cd "$lxcmHome/templates/$2"
+    ssh "$1" tar -c --one-file-system / | tar -xv
+}
+
+function template {
+    #LXC-TEMPLATE TEMPLATE
+    if [[ -e "$lxcmHome/templates/$1" || -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        echo "Template already exists."
+        exit 1
+    fi
+    lxc-create -B dir -n lxcm-temp-create -t "$1" || exit 1
+    mv "/var/lib/lxc/lxcm-temp-create/rootfs" "$lxcmHome/templates/$2"
+    lxc-destroy -n lxcm-temp-create
+}
+
+function compose {
+    #CONTAINER TEMPLATE
+    if [[ -e "$lxcmHome/templates/$2" || -e "$lxcmHome/templates/$2.sfs" ]]
+    then
+        echo "Template already exists."
+        exit 1
+    fi
+    if ! [[ "$1" != "" && -e "$lxcmHome/containers/$1" ]]
+    then
+        echo "Container does not exist."
+        exit 1
+    fi
+    echo "Container must be stopped and left off while processing."
+    read -p "Continue? [Y/n] " confirm
+    if [[ "$continue" =~ (n|N) ]]
+    then
+        exit 1
+    fi
+    stop "$1"
+    mount-filesystem "$1"
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    mkdir "$lxcmHome/templates/$2"
+    bindfs -o suid,dev --uid-offset="-${sNum}00000" --gid-offset="-${sNum}00000" "/var/lib/lxc/$1/rootfs" "$lxcmHome/templates/$2"
+    cd "$lxcmHome/templates/$2"
+    mksquashfs ./ ../"$2.sfs" -comp lzo -b 4096
+    if [[ "$?" != "0" ]]
+    then
+        echo "Compression failed!"
+        rm "$lxcmHome/templates/$2.sfs"
+    fi
+    cd /
+    umount "$lxcmHome/templates/$2"
+    rmdir "$lxcmHome/templates/$2"
+    unmount-filesystem "$1"
+}
+
+function compress {
+    #TEMPLATE
+    if ! [[ "$1" != "" && -e "$lxcmHome/templates/$1" ]]
+    then
+        echo "Template does not exist."
+        exit 1
+    fi
+    if [[ -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        echo "Template is compressed!"
+        exit 1
+    fi
+    cd "$lxcmHome/templates/$1"
+    mksquashfs ./ ../"$1.sfs" -comp lzo -b 4096
+    if [[ "$?" != "0" ]]
+    then
+        echo "Compression failed!"
+        rm "$lxcmHome/templates/$1.sfs"
+        return
+    fi
+    cd /
+    if check-template-op "$1" stop
+    then
+        rm -rf "$lxcmHome/templates/$1"
+    else
+        echo "You must manually run the command below"
+        echo "to free disk space, after stopping the"
+        echo "containers."
+        echo "# rm -rf \"$lxcmHome/templates/$1\""
+    fi
+}
+
+function destroy-template {
+    #TEMPLATE
+    if [[ "$1" == "" ]] || ! [[ -e "$lxcmHome/templates/$1" || -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        echo "Templates that do not exist cannot be destroyed!"
+        exit
+    fi
+    echo "About to delete template $1."
+    read -p "Are you sure? [y/N] " confirm
+    if ! [[ "$confirm" =~ (y|Y) ]]
+    then
+        return 1
+    fi
+    check-template-op "$1" destroy || return 1
+    cd /
+    if [[ -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        umount "$lxcmHome/templates/$1" 2>/dev/null
+        rm "$lxcmHome/templates/$1.sfs"
+        rmdir "$lxcmHome/templates/$1"
+    else
+        rm -r "$lxcmHome/templates/$1"
+    fi
+}
+
+function list-templates {
+    ls $lxcmHome/templates/ | sed 's/.sfs$//g' | sort -u
+}
+
+function new {
+    #TEMPLATE CONTAINER
+    if [[ -e "$lxcmHome/containers/$2" ]]
+    then
+        echo "Container already exists."
+        exit 1
+    fi
+    if [[ ! -e "$lxcmHome/templates/$1" && ! -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        echo "Template does not exist."
+        exit 1
+    fi
+    if [[ ! -e "$lxcmHome/seq" ]]
+    then
+        sNum=20
+    else
+        sNum=$(cat "$lxcmHome/seq")
+    fi
+    echo "$((sNum+1))" > "$lxcmHome/seq"
+    mkdir -p "$lxcmHome/containers/$2"
+    echo "$sNum" > "$lxcmHome/containers/$2/sNum"
+    mkdir -p "$lxcmHome/containers/$2/backups"
+    mkdir -p "$lxcmHome/containers/$2/unionmount"
+    mkdir -p "$lxcmHome/containers/$2/scratchfs"
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$2/scratchfs"
+    echo "root:${sNum}00000:65536" >> /etc/subgid
+    echo "root:${sNum}00000:65536" >> /etc/subuid
+    echo "$1" > "$lxcmHome/containers/$2/template"
+    > "$lxcmHome/containers/$2/fixed"
+    lxc-create -n "$2" -B dir -t none
+    mkdir "/var/lib/lxc/$2/rootfs"
+    echo "lxc.include = /usr/share/lxc/config/common.conf
+lxc.tty = 4
+lxc.utsname = $2
+lxc.arch = amd64
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.rootfs = /var/lib/lxc/$2/rootfs
+lxc.rootfs.backend = dir
+lxc.mount.entry = shm /dev/shm tmpfs defaults 0 0
+lxc.network.link = lxc-bridge-nat
+lxc.network.ipv4 = 192.168.100.$sNum/24
+lxc.network.ipv4.gateway = 192.168.100.1
+lxc.include = /usr/share/lxc/config/userns.conf
+lxc.cgroup.pids.max = 5000
+limits.memory = 256MB
+limits.memory.enforce = soft
+limits.cpu.allowance = 20%
+lxc.id_map = u 0 ${sNum}00000 65536
+lxc.id_map = g 0 ${sNum}00000 65536" > "/var/lib/lxc/$2/config"
+    setfacl -m u:${sNum}00000:x "/var/lib/lxc/$2/"
+}
+
+function mount-filesystem {
+    #CONTAINER
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    if [[ ! -e "$lxcmHome/containers/$1/fixed" ]]
+    then
+        mkdir "$lxcmHome/containers/$1/fixedmnt"
+        echo "Migrating filesystem..."
+        bindfs -o suid,dev --uid-offset=${sNum}00000 --gid-offset=${sNum}00000 "$lxcmHome/containers/$1/scratchfs" "$lxcmHome/containers/$1/fixedmnt" || { echo failed to mount/convert; exit 1; }
+        cp -rfa "$lxcmHome/containers/$1/fixedmnt" "$lxcmHome/containers/$1/fixedfs"
+        read -p "Please confirm there were no errors and press enter."
+        umount "$lxcmHome/containers/$1/fixedmnt"
+        rm -rf "$lxcmHome/containers/$1/scratchfs"
+        rmdir "$lxcmHome/containers/$1/fixedmnt"
+        mv "$lxcmHome/containers/$1/fixedfs" "$lxcmHome/containers/$1/scratchfs"
+        > "$lxcmHome/containers/$1/fixed"
+    fi
+    template=$(cat "$lxcmHome/containers/$1/template")
+    if [[ -e "$lxcmHome/templates/$template.sfs" ]]
+    then
+        if ! grep -q "$lxcmHome/templates/$template" <(mount | grep squashfs)
+        then
+            mkdir -p "$lxcmHome/templates/$template"
+            mount "$lxcmHome/templates/$template.sfs" "$lxcmHome/templates/$template"
+        fi
+    fi
+    if [[ ! -e "$lxcmHome/containers/$1/templatemount" ]]
+    then
+        mkdir "$lxcmHome/containers/$1/templatemount"
+        mkdir "$lxcmHome/containers/$1/mnt"
+        mkdir "$lxcmHome/containers/$1/backup"
+    fi
+    bindfs -o suid,dev --uid-offset=${sNum}00000 --gid-offset=${sNum}00000 "$lxcmHome/templates/$template" "$lxcmHome/containers/$1/templatemount"
+    unionfs -o cow,allow_other,use_ino,suid,dev,nonempty "$lxcmHome/containers/$1/scratchfs"=RW:"$lxcmHome/containers/$1/templatemount" "/var/lib/lxc/$1/rootfs"
+    if [[ ! -e "/var/lib/lxc/$1/rootfs/mnt" ]]
+    then
+        mkdir "/var/lib/lxc/$1/rootfs/mnt"
+	chown "${sNum}00000:${sNum}00000" "/var/lib/lxc/$1/rootfs/mnt"
+    fi
+    if [[ ! -e "/var/lib/lxc/$1/rootfs/extrafs" ]]
+    then
+        mkdir -p "$lxcmHome/containers/$1/extrafs"
+        mkdir "/var/lib/lxc/$1/rootfs/extrafs"
+        chown "${sNum}00000:${sNum}00000" "/var/lib/lxc/$1/rootfs/extrafs"
+    fi
+    mount -o bind "$lxcmHome/containers/$1/extrafs" "/var/lib/lxc/$1/rootfs/extrafs"
+    bindfs -o suid,dev,nonempty --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$1/mnt" "/var/lib/lxc/$1/rootfs/mnt"
+}
+
+function start {
+    #CONTAINER
+    if ! [[ -e "$lxcmHome/containers/$1" ]]
+    then
+        echo "Container does not exist."
+        exit 1
+    fi
+    stop "$1"
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    update-port-forwards
+    mount-filesystem "$1"
+    lxc-start -n "$1"
+    sleep 2
+    if [[ "$filterBetweenContainers" == "true" ]]
+    then
+        ipt "$1" -A INPUT -s "192.168.100.$sNum" -d "192.168.100.$sNum" -j ACCEPT
+        ipt "$1" -A OUTPUT -s "192.168.100.$sNum" -d "192.168.100.$sNum" -j ACCEPT
+        ipt "$1" -A INPUT -s 192.168.100.0/24 -d 192.168.100.0/24 -j DROP
+        ipt "$1" -A OUTPUT -s 192.168.100.0/24 -d 192.168.100.0/24 -j DROP
+    fi
+    if [[ -e "$lxcmHome/containers/$1/startup" ]]
+    then
+        cat "$lxcmHome/containers/$1/startup" | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile
+    fi
+}
+
+function ipt {
+    #CONTAINER PARAMS...
+    if ! grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        echo "You must start the container first!"
+        exit 1
+    fi
+    container="$1"
+    shift
+    sNum=$(cat "$lxcmHome/containers/$container/sNum")
+    nsPid=$(ps -aux | grep "^${sNum}00000" | head -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+    nsenter --net=/proc/$nsPid/ns/net iptables "$@"
+}
+
+function deleteFromPath {
+    #CONTAINER COMMAND
+    rm -f "/var/lib/lxc/$1/rootfs/sbin/$2" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/bin/$2" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/usr/sbin/$2" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/usr/bin/$2" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/usr/local/bin/$2" &>/dev/null
+}
+
+function clean {
+    #CONTAINER
+    if ! grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        echo "You must start the container first!"
+        exit 1
+    fi
+    deleteFromPath "$1" sudo
+    deleteFromPath "$1" iptables
+    deleteFromPath "$1" su
+    rm -f "/var/lib/lxc/$1/rootfs/root/.bashrc" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/root/.bash_profile" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/root/.bash_login" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/root/.profile" &>/dev/null
+    rm -f "/var/lib/lxc/$1/rootfs/etc/profile" &>/dev/null
+    cat /etc/bash.bashrc > "/var/lib/lxc/$1/rootfs/etc/bash.bashrc"
+    cat /etc/bash.bashrc | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile -c 'cat > /root/.bashrc'
+}
+
+function stop {
+    #CONTAINER
+    if grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        lxc-stop -n "$1" -t 30
+        unmount-filesystem "$1"
+    fi
+    unmount-filesystem "$1" 2> /dev/null
+}
+
+function unmount-filesystem {
+    #CONTAINER
+    umount "/var/lib/lxc/$1/rootfs/extrafs"
+    umount "/var/lib/lxc/$1/rootfs/mnt"
+    #umount "$lxcmHome/containers/$1/backup"
+    umount "/var/lib/lxc/$1/rootfs"
+    umount "$lxcmHome/containers/$1/templatemount"
+}
+
+function edit-startup {
+    #CONTAINER
+    $EDITOR "$lxcmHome/containers/$1/startup"
+}
+
+function shell {
+    #CONTAINER
+    lxc-attach -n "$1"
+}
+
+function resolveName {
+    #NAME
+    resp=""
+    while read -r line
+    do
+        if [[ "$line" == "" ]]
+        then
+            continue
+        fi
+        answer=""
+        if [[ "$line" =~ ^[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*(:[0-9]*|/[0-9]*)*$ ]]
+        then
+            answer="$line"
+        else
+            if [[ -f "/tmp/fwalias/$line" ]]
+            then
+                answer="$(cat "/tmp/fwalias/$line")"
+            elif [[ -e "$lxcmHome/containers/$line/" ]]
+            then
+                sNum=$(cat "$lxcmHome/containers/$line/sNum")
+                answer="192.168.100.$sNum"
+            else
+                echo "Warning: No Alias/Container for: $line" >&2
+                continue
+            fi
+        fi
+        if [[ "$resp" == "" ]]
+        then
+            resp="$answer"
+        else
+            resp="$resp,$answer"
+        fi
+    done < <(echo "$1" | tr ',' '\n')
+    echo "$resp"
+}
+
+function fwappend {
+    #POLICY
+    fullRule="$*"
+    if [[ "$1" == "alias" ]]
+    then
+        result=$(resolveName "$3")
+	if [[ "$result" != "" ]]
+        then
+            echo "$result" > "/tmp/fwalias/$2"
+        else
+            echo "Blank alias: $2"
+        fi
+    elif [[ "$1" =~ ^(local|out|outc|in|inc)$ ]]
+    then
+        sip=""
+        if [[ "$1" == "local" ]]
+        then
+            interface="lxc-bridge-nat"
+            chain="FORWARD"
+            direction="i"
+            sip="192.168.100.0/24"
+        elif [[ "$1" == "out" ]]
+        then
+            interface="$iface"
+            chain="OUTPUT"
+            direction="o"
+            cdir="i"
+            cchain="INPUT"
+        elif [[ "$1" == "in" ]]
+        then
+            interface="$iface"
+            chain="INPUT"
+            direction="i"
+            cdir="o"
+            cchain="OUTPUT"
+        elif [[ "$1" == "inc" ]]
+        then
+            interface="$iface"
+            chain="FORWARD"
+            direction="i"
+            cdir="o"
+            cchain="FORWARD"
+        elif [[ "$1" == "outc" ]]
+        then
+            interface="$iface"
+            chain="FORWARD"
+            direction="o"
+            cdir="i"
+            cchain="FORWARD"
+        fi
+        shift
+        rule="-A $chain -$direction $interface"
+        crule="-A $cchain -$cdir $interface"
+        applyCr="false"
+        arule=""
+        acrule=""
+        if [[ "$1" =~ (tcp|udp) ]]
+        then
+            protocol="$1"
+            shift
+            port="$1"
+            shift
+            if [[ "$port" =~ , ]]
+            then
+                rule="$rule -p $protocol -m multiport --dports $port"
+                crule="$crule -p $protocol -m multiport --sports $port"
+            else
+                rule="$rule -p $protocol --dport $port"
+                crule="$crule -p $protocol --sport $port"
+            fi
+            if [[ "$protocol" == "udp" ]]
+            then
+                applyCr="true"
+            fi
+        fi
+        if [[ "$1" == "allow" ]]
+        then
+            rule="$rule $arule -j ACCEPT"
+            crule="$crule $acrule -j ACCEPT"
+        elif [[ "$1" == "deny" ]]
+        then
+            rule="$rule -j LOG_AND_DROP"
+            applyCr="false"
+        else
+            echo "Bad Rule: $fullRule"
+            return
+        fi
+        shift
+        if [[ "$1" != "to" && "$1" != "" ]]
+        then
+            result=$(resolveName "$1")
+            if [[ "$result" == "" ]]
+            then
+                echo "Ignored Rule: $fullRule"
+            fi
+            rule="$rule -s $result"
+            crule="$crule -d $result"
+            shift
+        elif [[ "$sip" != "" ]]
+        then
+            rule="$rule -s $sip"
+            crule="$crule -d $sip"
+        fi
+        if [[ "$1" == "to" ]]
+        then
+            result=$(resolveName "$2")
+            if [[ "$result" == "" ]]
+            then
+                echo "Ignored Rule: $fullRule"
+            fi
+            rule="$rule -d $result"
+            crule="$crule -s $result"
+        fi
+        iptables $rule || echo "Bad rule: $fullRule"
+        if [[ "$cchain" != "" && "$applyCr" = "true" ]]
+        then
+            iptables $crule || echo "Bad rule: $fullRule"
+        fi
+    else
+        echo "Bad rule: $fullRule"
+        return
+    fi
+}
+
+function load-firewall {
+    iptables -F
+    iptables -P INPUT DROP
+    iptables -P OUTPUT DROP
+    iptables -P FORWARD DROP
+    iptables -N LOG_AND_DROP 2>/dev/null
+    iptables -F LOG_AND_DROP
+    iptables -A LOG_AND_DROP -m limit --limit 5/min -j LOG --log-prefix "Denied: " --log-level 7
+    iptables -A LOG_AND_DROP -j DROP
+    iptables -A FORWARD -i "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A FORWARD -o "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    mkdir "/tmp/fwalias/"
+    grep '^alias' "$1" | grep -v '^$\|^#' | while read -r policy
+    do
+        fwappend $policy
+    done
+    grep -v '^alias' "$1" | grep -v '^$\|^#' | while read -r policy
+    do
+        fwappend $policy
+    done
+    rm -r "/tmp/fwalias/"
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+}
+
+function fw {
+    if [[ ! -e "/var/lib/lxcm/" ]]
+    then
+        mkdir -p "/var/lib/lxcm/"
+    fi
+    if [[ "$1" == "load" ]]
+    then
+        cp "$2" "$lxcmHome/firewall"
+        load-firewall "$lxcmHome/firewall"
+    elif [[ "$1" == "save" ]]
+    then
+        cp "$lxcmHome/firewall" "$2"
+    elif [[ "$1" == "edit" ]]
+    then
+        $EDITOR "$lxcmHome/firewall"
+        load-firewall "$lxcmHome/firewall"
+    elif [[ "$1" == "reload" ]]
+    then
+        load-firewall "$lxcmHome/firewall"
+    elif [[ "$1" == "append" ]]
+    then
+        shift
+        echo "$*" >> "$lxcmHome/firewall"
+    elif [[ "$1" == "clear" ]]
+    then
+        > "$lxcmHome/firewall"
+    fi
+}
+
+function safe-shell {
+    #CONTAINER
+    lxc-attach -n "$1" --clear-env -- /bin/bash --noprofile --norc
+}
+
+function execute {
+    #CONTAINER COMMAND PARAMS...
+    container="$1"
+    shift
+    lxc-attach -n "$container" --clear-env -- "$@"
+}
+
+function check-template-op {
+    #check-template-op TEMPLATE OPERATION
+    ctcount=0
+    cts=""
+    echo "Containers affected by this operation:"
+    while read cont
+    do
+        if [[ "$(cat "$lxcmHome/containers/$cont/template")" == "$1" ]]
+        then
+            if [[ "$2" != "stop" ]] || grep -q "^$cont *RUNNING" <(lxc-ls --fancy)
+            then
+                echo "    $cont"
+                ((ctcount++))
+                cts="$cts|$cont"
+            fi
+        fi
+    done < <(ls "$lxcmHome/containers/")
+    if [[ "$ctcount" == "0" ]]
+    then
+        return 0
+    fi
+    if [[ "$2" == "stop" ]]
+    then
+        read -p "Stop these containers? [y/N] " confirm
+        if ! [[ "$confirm" =~ (y|Y) ]]
+        then
+            return 1
+        fi
+        echo "$cts" | tr '|' '\n' | while read cont
+        do
+            if [[ "$cont" == "" ]]
+            then
+                continue
+            fi
+            stop "$cont"
+        done
+    elif [[ "$2" == "destroy" ]]
+    then
+        echo "NOTE: Destroying a container deletes its backups!"
+        read -p "DESTROY (!) these containers? [y/N] " confirm
+        if ! [[ "$confirm" =~ (y|Y) ]]
+        then
+            return 1
+        fi
+        echo "$cts" | tr '|' '\n' | while read cont
+        do
+            if [[ "$cont" == "" ]]
+            then
+                continue
+            fi
+            destroy-container "$cont" noconfirm
+        done
+    fi
+    return 0
+}
+
+function destroy-container {
+    #CONTAINER [noconfirm]
+    if [[ "$1" == "" || ! -e "$lxcmHome/containers/$1/" ]]
+    then
+        echo "You can't destroy a container that doesn't exist!"
+        return 1
+    fi
+    if [[ "$2" != "noconfirm" ]]
+    then
+        echo "NOTE: Destroying a container deletes its backups!"
+        read -p "DESTROY (!) container \"$1\" ? [y/N] " confirm
+        if ! [[ "$confirm" =~ (y|Y) ]]
+        then
+            return 1
+        fi
+    fi
+    stop "$1"
+    unmount-filesystem "$1" 2>/dev/null
+    lxc-destroy -n "$1"
+    rm -r "$lxcmHome/containers/$1/"
+}
+
+function list-containers {
+    ls "$lxcmHome/containers/"
+}
+
+function update-port-forwards {
+    iptables -t nat -F PREROUTING
+    iptables -t nat -F OUTPUT
+    iptables -t nat -F POSTROUTING
+    iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
+    sysctl -w net.ipv4.conf.all.route_localnet=1 &>/dev/null
+    cat "$lxcmHome/forwards" | while read line
+    do
+        protocol=$(cut -d: -f1 <<< "$line")
+        hport=$(cut -d: -f2 <<< "$line")
+        sport=$(cut -d: -f3 <<< "$line")
+        container=$(cut -d: -f4 <<< "$line")
+        mode=$(cut -d: -f5 <<< "$line")
+        if [[ ! -e "$lxcmHome/containers/$container/sNum" ]]
+        then
+            echo "Ignored forward for $container: Container does not exist."
+            continue
+        fi
+        sNum=$(cat "$lxcmHome/containers/$container/sNum")
+        iptables -t nat -A OUTPUT -p "$protocol" -o "$iface" --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
+        iptables -t nat -A OUTPUT -p "$protocol" -o lo --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
+        if [[ "$mode" != "public" ]]
+        then
+            iptables -t nat -A PREROUTING -p "$protocol" -i lxc-bridge-nat --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
+            iptables -t nat -A POSTROUTING -o lxc-bridge-nat -s 192.168.100.0/24 -p "$protocol" -m "$protocol" --dport "$hport" -j SNAT --to-source "$ip"
+        fi
+        if [[ "$mode" != "private" ]]
+        then
+            iptables -t nat -A PREROUTING -p "$protocol" -i "$iface" --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
+        fi
+    done
+}
+
+function forward {
+    #add/delete tcp/udp/both HPORT CPORT CONTAINER [private/public/all]
+    if ! [[ -e "$lxcmHome/containers/$5" || "$1" == "delete" ]]
+    then
+        echo "Container does not exist."
+        exit 1
+    fi
+    mode="$6"
+    if [[ ! "$6" =~ (private|public) ]]
+    then
+        mode="all"
+    fi
+    if [[ "$2" == "both" ]]
+    then
+        forward "$1" "udp" "$3" "$4" "$5" "$mode"
+        forward "$1" "tcp" "$3" "$4" "$5" "$mode"
+    elif [[ "$1" == "add" ]]
+    then
+        sort -u < "$lxcmHome/forwards" | grep -v "^$2:$3:$4:$5:" > "$lxcmHome/forwards.tmp"
+        mv "$lxcmHome/forwards.tmp" "$lxcmHome/forwards"
+        echo "$2:$3:$4:$5:$mode" >> "$lxcmHome/forwards"
+    elif [[ "$1" == "remove" ]]
+    then
+        grep -vxF "$2:$3:$4:$5:$mode" < "$lxcmHome/forwards" > "$lxcmHome/forwards.tmp"
+        mv "$lxcmHome/forwards.tmp" "$lxcmHome/forwards"
+    fi
+    update-port-forwards
+}
+
+function list-forwards {
+    cat "$lxcmHome/forwards" | tr ':' ' '
+}
+
+function backup {
+    #CONTAINER BACKUP
+    if [[ -e "$lxcmHome/containers/$1/backups/$2.tar.gz" ]]
+    then
+	echo "Backup already exists."
+    	exit 1
+    fi
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    bindfs -o suid,dev --uid-offset="-${sNum}00000" --gid-offset="-${sNum}00000" "$lxcmHome/containers/$1/scratchfs" "$lxcmHome/containers/$1/backup"
+    mount -o bind "$lxcmHome/containers/$1/scratchfs/.unionfs-fuse" "$lxcmHome/containers/$1/backup/.unionfs-fuse"
+    cd "$lxcmHome/containers/$1/backup"
+    mksquashfs ./ "$lxcmHome/containers/$1/backups/$2.sfs" -comp lzo -b 4096
+    cd /
+    umount "$lxcmHome/containers/$1/backup/.unionfs-fuse"
+    umount "$lxcmHome/containers/$1/backup"
+}
+
+function restore {
+    #BACKUP CONTAINER
+    read -p "Create backup first? [Y/n] " confirm
+    stop "$2"
+    if ! [[ "$confirm" =~ (n|N) ]]
+    then
+        backup "$2" "$(date +%FT%T)-dirty"
+    fi
+    rm -r "$lxcmHome/containers/$2/scratchfs"
+    cd "$lxcmHome/containers/$2/"
+    sNum=$(cat "$lxcmHome/containers/$2/sNum")
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$2/scratchfs"
+    mkdir "$lxcmHome/containers/$2/tmp"
+    mkdir "$lxcmHome/containers/$2/tmp2"
+    mount "$lxcmHome/containers/$2/backups/$1.sfs" "$lxcmHome/containers/$2/tmp"
+    bindfs -o suid,dev --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$2/tmp" "$lxcmHome/containers/$2/tmp2"
+    mount -o bind "$lxcmHome/containers/$2/tmp/.unionfs-fuse" "$lxcmHome/containers/$2/tmp2/.unionfs-fuse"
+    cp -rfva "$lxcmHome/containers/$2/tmp2" "$lxcmHome/containers/$2/scratchfs"
+    umount "$lxcmHome/containers/$2/tmp2/.unionfs-fuse"
+    umount "$lxcmHome/containers/$2/tmp2"
+    umount "$lxcmHome/containers/$2/tmp"
+    rmdir "$lxcmHome/containers/$2/tmp2" "$lxcmHome/containers/$2/tmp"
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$2/scratchfs"
+}
+
+function force-restore {
+    #O-CONTAINER BACKUP D-CONTAINER
+    echo "WARNING: This operation is DANGEROUS!"
+    read -p "Are you sure? [y/N] " confirm
+    stop "$3"
+    if ! [[ "$confirm" =~ (y|Y) ]]
+    then
+        exit
+    fi
+    ln -s "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$3/backups/$2.sfs"
+    restore "$2" "$3"
+    rm "$lxcmHome/containers/$3/backups/$2.sfs"
+}
+
+function delete {
+    #CONTAINER BACKUP
+    rm "$lxcmHome/containers/$1/backups/$2.sfs"
+}
+
+function list-backups {
+    #CONTAINER
+    ls "$lxcmHome/containers/$1/backups/"
+}
+
+function scrub {
+    #CONTAINER
+    read -p "Create backup first? [Y/n] " confirm
+    stop "$1"
+    if ! [[ "$confirm" =~ (n|N) ]]
+    then
+        backup "$1" "$(date +%FT%T)-dirty"
+    fi
+    rm -r "$lxcmHome/containers/$1/scratchfs"
+    mkdir "$lxcmHome/containers/$1/scratchfs"
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$1/scratchfs"
+}
+
+action="$1"
+shift
+if [[ "$action" =~ (install|migrate|delete|template|compress|new|start|stop|edit-startup|shell|forward|backup|restore|scrub|list-[fctb]|safe-shell|execute|clean|ipt|fw|force-restore|destroy-[ct]|compose) ]]
+then
+    "$action" "$@"
+else
+    echo "lxcm - Linux Container Management Frontend
+
+lxcm ACTION PARAMS...
+
+where ACTION is:
+    install - Install lxcm.
+    
+    migrate HOST TEMPLATE - Create template from system.
+    template LXC-TEMPLATE TEMPLATE - Create template from lxc template.
+    compress TEMPLATE - Compress a template.
+    compose CONTAINER TEMPLATE - Convert container to template.
+    destroy-template TEMPLATE - Delete a template.
+    list-templates - List all templates.
+
+    new TEMPLATE CONTAINER - Create a container from a template.
+    start CONTAINER - Start specified container.
+    stop CONTAINER - Stop specified container.
+    edit-startup CONTAINER - Edit container startup.
+    shell CONTAINER - Open a shell in container.
+    safe-shell CONTAINER - Open shell without bash configs. (Not needed after clean.)
+    execute CONTAINER COMMAND PARAMS... - Execute command in container.
+    clean CONTAINER - Remove un-needed functionality for increased security.
+    ipt CONTAINER PARAMS... - Execute iptables in container. (Changes don't persist.)
+    destroy-container - Delete a container.
+    list-containers - List all containers.
+
+    forward add tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Add a port forward.
+    forward remove tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Delete a port forward.
+    list-forwards - List all port forwards.
+
+    fw load FILE - Load firewall rules from file.
+    fw save FILE - Save firewall rules to file.
+    fw edit - Edit and reapply firewall rules.
+    fw append - Append rules to firewall. (Requires reload.)
+    fw clear - Clear firewall. (Requires reload.)
+    fw reload - Reload current firewall. Works after reboot.
+
+    backup CONTAINER BACKUP - Backup the container.
+    restore BACKUP CONTAINER - Restore a backup.
+    delete CONTAINER BACKUP - Delete the backup.
+    scrub CONTAINER - Revert container to template.
+    list-backups CONTAINER - List all backups for container.
+    force-restore O-CONTAINER BACKUP D-CONTAINER - Restore backups from different containers!
+
+    Firewall policies have 6 commands:
+        alias name ip, (can have multiple with commas)
+        local [tcp/udp port] allow/deny [container,]
+        outc [tcp/udp port] allow/deny [container,] [to alias/ip,]
+        inc [tcp/udp port] allow/deny [alias/ip,] [to container,]
+        in [tcp/udp port] allow/deny [alias/ip,]
+        out [tcp/udp port] allow/deny [to alias/ip,]"
+fi
