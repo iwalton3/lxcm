@@ -19,7 +19,7 @@ function install {
     cp "$scriptName" /usr/bin/lxcm
     chmod 755 /usr/bin/lxcm
     chown root:root /usr/bin/lxcm
-    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim
+    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim whiptail
     mkdir -p "$lxcmHome/templates/"
     chmod 700 "$lxcmHome"
     mkdir -p "$lxcmHome/containers/"
@@ -918,6 +918,38 @@ function scrub {
     mkdir "$lxcmHome/containers/$1/scratchfs"
     sNum=$(cat "$lxcmHome/containers/$1/sNum")
     chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$1/scratchfs"
+}
+
+function listBox {
+    #[question] [action text] Ask and store result into answer variable.
+    question="$1"
+    tmpfile="/tmp/$RANDOM$RANDOM"
+    shift
+    whiptail --title "lxcm interactive" --menu "$question" 0 0 0 "$@" 2> "$tmpfile"
+    status="$?"
+    answer="$(cat "$tmpfile")"
+    rm "$tmpfile"
+    return $status
+}
+
+function yesNo {
+    #[question]
+    whiptail --title "lxcm interactive" --yesno "$1" 0 0
+    return $?
+}
+
+function inputBox {
+    #[question] [initial] Answer will be saved to answer.
+    tmpfile="/tmp/$RANDOM$RANDOM"
+    whiptail --title "lxcm interactive" --inputbox "$1" 0 0 "$2" 2> "$tmpfile"
+    status="$?"
+    answer="$(cat "$tmpfile")"
+    rm "$tmpfile"
+    return $status
+}
+
+function e {
+    NEWT_COLORS='root=,red' whiptail --title "lxcm interactive" --msgbox "$1" 0 0
 }
 
 action="$1"
