@@ -15,11 +15,219 @@ then
     mv "$lxcmHome/containers/seq" "$lxcmHome/seq"
 fi
 
+function lxcm_completion {
+   lxcmHome="/var/lib/lxcm"
+   
+   _lxcm_template()
+   {
+       COMPREPLY=( $( compgen -W '$( command ls "$lxcmHome/templates/" | sed "s/\.sfs//g" )' \
+           -- "$cur" ) )
+   }
+   
+   _lxcm_os_template()
+   {
+       COMPREPLY=( $( compgen -W 'debian ubuntu centos alpine oracle' \
+           -- "$cur" ) )
+   }
+   
+   _lxcm_container()
+   {
+       COMPREPLY=( $( compgen -W '$( command ls "$lxcmHome/containers/" )' \
+           -- "$cur" ) )
+   }
+   
+   _lxcm_container_backup()
+   {
+       COMPREPLY=( $( compgen -W '$( command ls "$lxcmHome/containers/'"$1"'/backups/" | sed "s/\.sfs//g" )' \
+           -- "$cur" ) )
+   }
+   
+   _print_all()
+   {
+       while [[ "$1" != "" ]]
+       do
+           echo "$1"
+           shift
+       done
+   }
+   
+   _lxcm_fs()
+   {
+       cur=${cur:=/}
+       cur="/var/lib/lxc/$1/rootfs/$cur"
+       _filedir
+       COMPREPLY=( $( _print_all "${COMPREPLY[@]}" | sed 's#/var/lib/lxc/.*/rootfs/##g' ) )
+   }
+   
+   _lxcm()
+   {
+       local cur prev words cword split
+       _init_completion -s || return
+       
+       $split && return
+   
+       local arg
+       _get_first_arg
+       if [[ "$arg" == "" ]]
+       then
+           COMPREPLY=( $( compgen -W 'migrate template compress compose destroy-template
+               list-templates ez new start stop restart edit-startup shell safe-shell
+               execute clean ipt get put destroy-container list-containers forward
+               list-forwards backup restore delete scrub list-backups force-restore' -- "$cur" ) )
+       else
+           local args
+           _count_args
+           case $arg in
+               template)
+                   case $args in
+                       2)
+                           _lxcm_os_template
+                           ;;
+                       3)
+                           COMPREPLY=( "$prev" )
+                           ;;
+                       esac
+                   ;;
+               compress|destroy-template|new)
+                   case $args in
+                       2)
+                           _lxcm_template
+                           ;;
+                       esac
+                   ;;
+               compose)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           COMPREPLY=( "$prev-template" )
+                           ;;
+                       esac
+                   ;;
+               start|stop|restart|edit-startup|shell|safe-shell|clean|ipt|destroy-container|scrub|list-backups)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       esac
+                   ;;
+               execute)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       *)
+                           _command_offset $args
+                           ;;
+                       esac
+                   ;;
+               get)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           _lxcm_fs "$prev"
+                           ;;
+                       4)
+                           _filedir
+                           ;;
+                       esac
+                   ;;
+               put)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           _filedir
+                           ;;
+                       4)
+                           _lxcm_fs "${COMP_WORDS[2]}"
+                           ;;
+                       esac
+                   ;;
+               forward)
+                   case $args in
+                       2)
+                           COMPREPLY=( $( compgen -W 'add remove' -- "$cur" ) )
+                           ;;
+                       3)
+                           COMPREPLY=( $( compgen -W 'tcp udp both' -- "$cur" ) )
+                           ;;
+                       4)
+                           COMPREPLY=( $( compgen -W '20 21 22 23 25 53 69 80 110 123 143 443 3306' -- "$cur" ) )
+                           ;;
+                       5)
+                           COMPREPLY=( "$prev" )
+                           ;;
+                       6)
+                           _lxcm_container
+                           ;;
+                       7)
+                           COMPREPLY=( $( compgen -W 'private public all' -- "$cur" ) )
+                           ;;
+                       esac
+                   ;;
+               fw)
+                   case $args in
+                       2)
+                           COMPREPLY=( $( compgen -W 'load save edit append clear reload' -- "$cur" ) )
+                           ;;
+                       3)
+                           if [[ "$prev" =~ (load|save) ]]
+                           then
+                               _filedir
+                           fi
+                           ;;
+                       esac
+                   ;;
+               backup)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           COMPREPLY=( "$(date +%FT%T)" )
+                           ;;
+                       esac
+                   ;;
+               restore|delete)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           _lxcm_container_backup "$prev"
+                           ;;
+                       esac
+                   ;;
+               force-restore)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           _lxcm_container_backup "$prev"
+                           ;;
+                       4)
+                           _lxcm_container
+                           ;;
+                       esac
+                   ;;
+           esac
+       fi
+   } &&
+   complete -F _lxcm lxcm
+
+}
+
 function install {
     cp "$scriptName" /usr/bin/lxcm
     chmod 755 /usr/bin/lxcm
     chown root:root /usr/bin/lxcm
-    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim whiptail
+    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim whiptail bash-completion
     mkdir -p "$lxcmHome/templates/"
     chmod 700 "$lxcmHome"
     mkdir -p "$lxcmHome/containers/"
@@ -44,6 +252,7 @@ iface lxc-bridge-nat inet static
     do
         ifup "$ifen"
     done
+    type lxcm_completion | grep '^   ' > /etc/bash_completion.d/lxcm-completion.bash
 }
 
 function migrate {
