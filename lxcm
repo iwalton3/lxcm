@@ -1037,7 +1037,7 @@ function ez {
 
     if yesNo "Would you like to start the container?"
     then
-        start "$ctanem"
+        start "$ctname"
     fi
 }
 
