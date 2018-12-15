@@ -950,6 +950,95 @@ function inputBox {
 
 function e {
     NEWT_COLORS='root=,red' whiptail --title "lxcm interactive" --msgbox "$1" 0 0
+    exit 1
+}
+
+function checkForOld {
+    if [[ -d "/old" ]]
+    then
+        echo old Create_from_previous_os
+    fi
+}
+
+function ez {
+    listBox "Please select a template to use as the basis for the new container." \
+        $(list-templates | sed 's/\(.*\)/\1 Use_template_\1/g') \
+        "new" "Create from distribution template." \
+        "migrate" "Create from existing system via ssh." \
+        "compose" "Create from existing container." \
+        $(checkForOld) || exit 1
+
+    creatingTemplate="false"
+    template="$answer"
+    if [[ "$answer" == "old" ]] && [[ ! -e "$lxcmHome/containers/old" ]]
+    then
+        creatingTemplate="true"
+        inputBox "Enter a name for the template." "old" || exit 1
+        template="$answer"
+        [[ "$template" == "" ]] && e "You didn't provide a name!"
+        mv /old "$lxcmHome/containers/$template"
+    elif [[ "$answer" == "new" ]]
+    then
+        creatingTemplate="true"
+        listBox "Please select the operating system for the template." \
+            "debian" "Install Debian" \
+            "ubuntu" "Install Ubuntu" \
+            "centos" "Install CentOS" \
+            "alpine" "Install Alpine" \
+            "oracle" "Install Oracle" || exit 1
+        templateOS="$answer"
+        if [[ "$templateOS" =~ (centos|oracle) ]] && ! which yum 2>/dev/null
+        then
+            echo "Installing yum to allow for template creation..."
+            apt install -y yum || exit 1
+        fi
+        inputBox "Enter a name for the template." "$templateOS" || exit 1
+        template="$answer"
+        [[ "$template" == "" ]] && e "You didn't provide a name!"
+        template "$templateOS" "$template" || exit 1
+    elif [[ "$answer" == "migrate" ]]
+    then
+        creatingTemplate="true"
+        inputBox "Enter the ip address or hostname of the system. Root login is required." || exit 1
+        host="$answer"
+        inputBox "Enter a name for the template." || exit 1                  
+        template="$answer"
+        [[ "$template" == "" ]] && e "You didn't provide a name!"
+        migrate "$host" "$template" || exit 1
+    elif [[ "$answer" == "compose" ]]
+    then
+        creatingTemplate="true"
+        listBox "Please select a container to use as the basis for this template." \
+            $(list-containers | sed 's/\(.*\)/\1 Use_container_\1/g') || exit 1
+        templateSource="$answer"
+        inputBox "Enter a name for the template." "$templateSource-template" || exit 1
+        template="$answer"
+        [[ "$template" == "" ]] && e "You didn't provide a name!"
+        compose "$templateSource" "$template" || exit 1
+    fi
+
+    if [[ "$creatingTemplate" == "true" ]]
+    then
+        if yesNo "Would you like to compress this template?"
+        then
+            compress "$template"
+        fi
+    fi
+
+    inputBox "Enter a name for the container." || exit 1
+    ctname="$answer"
+    [[ "$template" == "" ]] && e "You didn't provide a name!"
+    new "$template" "$ctname" || exit 1
+
+    if yesNo "Would you like to edit the container startup?"
+    then
+        EDITOR=nano edit-startup "$ctname"
+    fi
+
+    if yesNo "Would you like to start the container?"
+    then
+        start "$ctanem"
+    fi
 }
 
 action="$1"
@@ -972,6 +1061,7 @@ where ACTION is:
     destroy-template TEMPLATE - Delete a template.
     list-templates - List all templates.
 
+    ez - Create a container (and template) using a wizard.
     new TEMPLATE CONTAINER - Create a container from a template.
     start CONTAINER - Start specified container.
     stop CONTAINER - Stop specified container.
