@@ -858,28 +858,28 @@ function backup {
 }
 
 function restore {
-    #BACKUP CONTAINER
+    #CONTAINER BACKUP
     read -p "Create backup first? [Y/n] " confirm
-    stop "$2"
+    stop "$1"
     if ! [[ "$confirm" =~ (n|N) ]]
     then
-        backup "$2" "$(date +%FT%T)-dirty"
+        backup "$1" "$(date +%FT%T)-dirty"
     fi
-    rm -r "$lxcmHome/containers/$2/scratchfs"
-    cd "$lxcmHome/containers/$2/"
-    sNum=$(cat "$lxcmHome/containers/$2/sNum")
-    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$2/scratchfs"
-    mkdir "$lxcmHome/containers/$2/tmp"
-    mkdir "$lxcmHome/containers/$2/tmp2"
-    mount "$lxcmHome/containers/$2/backups/$1.sfs" "$lxcmHome/containers/$2/tmp"
-    bindfs -o suid,dev --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$2/tmp" "$lxcmHome/containers/$2/tmp2"
-    mount -o bind "$lxcmHome/containers/$2/tmp/.unionfs-fuse" "$lxcmHome/containers/$2/tmp2/.unionfs-fuse"
-    cp -rfva "$lxcmHome/containers/$2/tmp2" "$lxcmHome/containers/$2/scratchfs"
-    umount "$lxcmHome/containers/$2/tmp2/.unionfs-fuse"
-    umount "$lxcmHome/containers/$2/tmp2"
-    umount "$lxcmHome/containers/$2/tmp"
-    rmdir "$lxcmHome/containers/$2/tmp2" "$lxcmHome/containers/$2/tmp"
-    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$2/scratchfs"
+    rm -r "$lxcmHome/containers/$1/scratchfs"
+    cd "$lxcmHome/containers/$1/"
+    sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$1/scratchfs"
+    mkdir "$lxcmHome/containers/$1/tmp"
+    mkdir "$lxcmHome/containers/$1/tmp2"
+    mount "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$1/tmp"
+    bindfs -o suid,dev --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$1/tmp" "$lxcmHome/containers/$1/tmp2"
+    mount -o bind "$lxcmHome/containers/$1/tmp/.unionfs-fuse" "$lxcmHome/containers/$1/tmp2/.unionfs-fuse"
+    cp -rfva "$lxcmHome/containers/$1/tmp2" "$lxcmHome/containers/$1/scratchfs"
+    umount "$lxcmHome/containers/$1/tmp2/.unionfs-fuse"
+    umount "$lxcmHome/containers/$1/tmp2"
+    umount "$lxcmHome/containers/$1/tmp"
+    rmdir "$lxcmHome/containers/$1/tmp2" "$lxcmHome/containers/$1/tmp"
+    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$1/scratchfs"
 }
 
 function force-restore {
@@ -1089,7 +1089,7 @@ where ACTION is:
     fw reload - Reload current firewall. Works after reboot.
 
     backup CONTAINER BACKUP - Backup the container.
-    restore BACKUP CONTAINER - Restore a backup.
+    restore CONTAINER BACKUP - Restore a backup.
     delete CONTAINER BACKUP - Delete the backup.
     scrub CONTAINER - Revert container to template.
     list-backups CONTAINER - List all backups for container.
