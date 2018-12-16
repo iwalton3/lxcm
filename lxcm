@@ -1106,13 +1106,26 @@ function inspect {
         echo "Backup does not exist."
         exit 1
     fi
-    mkdir -p "$lxcmHome/containers/$1/temp-mount/$2-unmerged"
-    mkdir -p "$lxcmHome/containers/$1/temp-mount/$2"
-    template=$(cat "$lxcmHome/containers/$1/template")
-    mount-template "$template"
-    mount "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$1/temp-mount/$2-unmerged"
-    unionfs -o cow,allow_other,use_ino,suid,dev,nonempty "$lxcmHome/containers/$1/temp-mount/$2-unmerged":"$lxcmHome/templates/$template" "$lxcmHome/containers/$1/temp-mount/$2"
-    echo "Mounted to: $lxcmHome/containers/$1/temp-mount/$2"
+    if [[ ! -e "$lxcmHome/containers/$1/temp-mount/$2" ]]
+    then
+        backupHash=$(md5sum <<< "$2")
+        backupHash=${backupHash:0:10}
+        mkdir -p "$lxcmHome/containers/$1/temp-mount/$backupHash-unmerged"
+        mkdir -p "$lxcmHome/containers/$1/temp-mount/$2"
+        template=$(cat "$lxcmHome/containers/$1/template")
+        mount-template "$template"
+        mount "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$1/temp-mount/$backupHash-unmerged"
+        unionfs -o cow,allow_other,use_ino,suid,dev,nonempty "$lxcmHome/containers/$1/temp-mount/$backupHash-unmerged":"$lxcmHome/templates/$template" "$lxcmHome/containers/$1/temp-mount/$2"
+        echo "Mounted to: $lxcmHome/containers/$1/temp-mount/$2"
+    else
+        echo "Already mounted to: $lxcmHome/containers/$1/temp-mount/$2"
+    fi
+    read -p "Open a shell there? [Y/n] " confirm
+    if ! [[ "$confirm" =~ (n|N) ]]
+    then
+        cd "$lxcmHome/containers/$1/temp-mount/$2"
+        bash
+    fi
 }
 
 function restore {
@@ -1160,8 +1173,12 @@ function force-restore {
 
 function delete {
     #CONTAINER BACKUP
-    umount "$lxcmHome/containers/$1/temp-mount/$2-unmerged" 2>/dev/null
+    backupHash=$(md5sum <<< "$2")
+    backupHash=${backupHash:0:10}
     umount "$lxcmHome/containers/$1/temp-mount/$2" 2>/dev/null
+    umount "$lxcmHome/containers/$1/temp-mount/$backupHash-unmerged" 2>/dev/null
+    rmdir "$lxcmHome/containers/$1/temp-mount/$2" \
+        "$lxcmHome/containers/$1/temp-mount/$backupHash-unmerged" 2>/dev/null
     rm "$lxcmHome/containers/$1/backups/$2.sfs"
 }
 
