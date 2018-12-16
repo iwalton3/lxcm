@@ -73,7 +73,8 @@ function lxcm_completion {
            COMPREPLY=( $( compgen -W 'migrate template compress compose destroy-template
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
-               list-forwards backup restore delete scrub list-backups force-restore' -- "$cur" ) )
+               list-forwards backup restore delete scrub list-backups force-restore
+               inspect' -- "$cur" ) )
        else
            local args
            _count_args
