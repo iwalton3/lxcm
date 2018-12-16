@@ -647,6 +647,15 @@ function edit-startup {
 
 function shell {
     #CONTAINER
+    if ! checkContainerStarted "$1"
+    then
+        echo "The container \"$1\" is not started."
+        read -p "Would you like to start it? [Y/n] " confirm
+        if ! [[ "$confirm" =~ (N|n) ]]
+        then
+            start "$1"
+        fi
+    fi
     lxc-attach -n "$1"
 }
 
