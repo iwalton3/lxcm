@@ -74,7 +74,7 @@ function lxcm_completion {
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
                list-forwards backup restore delete scrub list-backups force-restore
-               inspect autostart service' -- "$cur" ) )
+               inspect autostart service clear-passwords' -- "$cur" ) )
        else
            local args
            _count_args
@@ -106,7 +106,7 @@ function lxcm_completion {
                            ;;
                        esac
                    ;;
-               start|stop|restart|edit-startup|shell|safe-shell|clean|ipt|destroy-container|scrub|list-backups)
+               start|stop|restart|edit-startup|shell|safe-shell|clean|ipt|destroy-container|scrub|list-backups|clear-passwords)
                    case $args in
                        2)
                            _lxcm_container
@@ -640,6 +640,16 @@ function deleteFromPath {
     rm -f "/var/lib/lxc/$1/rootfs/usr/local/bin/$2" &>/dev/null
 }
 
+function clear-passwords {
+    #CONTAINER
+    if ! grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
+    then
+        echo "You must start the container first!"
+        exit 1
+    fi
+    unsetPasswords "/var/lib/lxc/$1/rootfs/etc/shadow"
+}
+
 function clean {
     #CONTAINER
     if ! grep -q "^$1 *RUNNING" <(lxc-ls --fancy)
@@ -655,7 +665,6 @@ function clean {
     rm -f "/var/lib/lxc/$1/rootfs/root/.bash_login" &>/dev/null
     rm -f "/var/lib/lxc/$1/rootfs/root/.profile" &>/dev/null
     rm -f "/var/lib/lxc/$1/rootfs/etc/profile" &>/dev/null
-    unsetPasswords "/var/lib/lxc/$1/rootfs/etc/shadow"
     cat /etc/bash.bashrc > "/var/lib/lxc/$1/rootfs/etc/bash.bashrc"
     cat /etc/bash.bashrc | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile -c 'cat > /root/.bashrc'
 }
@@ -1455,6 +1464,7 @@ where ACTION is:
     safe-shell CONTAINER - Open shell without bash configs. (Not needed after clean.)
     execute CONTAINER COMMAND PARAMS... - Execute command in container.
     clean CONTAINER - Remove un-needed functionality for increased security.
+    clear-passwords - Remove all passwords from container. (May break user logins.)
     ipt CONTAINER PARAMS... - Execute iptables in container. (Changes don't persist.)
     get CONTAINER CONTANER-PATH [LOCAL-PATH] - Copy file from container.
     put CONTAINER LOCAL-PATH [CONTANER-PATH] - Copy file to container.
