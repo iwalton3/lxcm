@@ -193,7 +193,7 @@ function lxcm_completion {
                            ;;
                        esac
                    ;;
-               restore|delete)
+               restore|delete|inspect)
                    case $args in
                        2)
                            _lxcm_container
@@ -482,8 +482,25 @@ lxc.id_map = g 0 ${sNum}00000 65536" > "/var/lib/lxc/$2/config"
     setfacl -m u:${sNum}00000:x "/var/lib/lxc/$2/"
 }
 
+function mount-template {
+    #TEMPLATE
+    if [[ -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        if ! grep -q "$lxcmHome/templates/$1" <(mount | grep squashfs)
+        then
+            mkdir -p "$lxcmHome/templates/$1"
+            mount "$lxcmHome/templates/$1.sfs" "$lxcmHome/templates/$1"
+        fi
+    fi
+}
+
 function mount-filesystem {
     #CONTAINER
+    if [[ "$1" == "" ]]
+    then
+        echo "Refusing to mount filesystem without container name!"
+        exit 1
+    fi
     sNum=$(cat "$lxcmHome/containers/$1/sNum")
     if [[ ! -e "$lxcmHome/containers/$1/fixed" ]]
     then
@@ -499,14 +516,7 @@ function mount-filesystem {
         > "$lxcmHome/containers/$1/fixed"
     fi
     template=$(cat "$lxcmHome/containers/$1/template")
-    if [[ -e "$lxcmHome/templates/$template.sfs" ]]
-    then
-        if ! grep -q "$lxcmHome/templates/$template" <(mount | grep squashfs)
-        then
-            mkdir -p "$lxcmHome/templates/$template"
-            mount "$lxcmHome/templates/$template.sfs" "$lxcmHome/templates/$template"
-        fi
-    fi
+    mount-template "$template"
     if [[ ! -e "$lxcmHome/containers/$1/templatemount" ]]
     then
         mkdir "$lxcmHome/containers/$1/templatemount"
@@ -990,6 +1000,8 @@ function destroy-container {
     fi
     stop "$1"
     unmount-filesystem "$1" 2>/dev/null
+    umount "$lxcmHome/containers/$1/temp-mount/"* 2>/dev/null
+    umount "$lxcmHome/containers/$1/temp-mount/"* 2>/dev/null
     lxc-destroy -n "$1"
     sNum=$(cat "$lxcmHome/containers/$1/sNum")
     grep -vF "root:${sNum}00000:65536" /etc/subgid > /etc/subgid.lxcm-temp
@@ -1071,7 +1083,7 @@ function list-forwards {
 
 function backup {
     #CONTAINER BACKUP
-    if [[ -e "$lxcmHome/containers/$1/backups/$2.tar.gz" ]]
+    if [[ -e "$lxcmHome/containers/$1/backups/$2.sfs" ]]
     then
 	echo "Backup already exists."
     	exit 1
@@ -1086,8 +1098,29 @@ function backup {
     umount "$lxcmHome/containers/$1/backup"
 }
 
+function inspect {
+    #CONTAINER BACKUP
+    if ! -e [[ "$lxcmHome/containers/$1/backups/$2.sfs" ]]
+    then
+        echo "Backup does not exist."
+        exit 1
+    fi
+    mkdir -p "$lxcmHome/containers/$1/temp-mount/$2-unmerged"
+    mkdir -p "$lxcmHome/containers/$1/temp-mount/$2"
+    template=$(cat "$lxcmHome/containers/$1/template")
+    mount-template "$template"
+    mount "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$1/temp-mount/$2-unmerged"
+    unionfs -o cow,allow_other,use_ino,suid,dev,nonempty "$lxcmHome/containers/$1/temp-mount/$2-unmerged":"$lxcmHome/templates/$template" "$lxcmHome/containers/$1/temp-mount/$2"
+    echo "Mounted to: $lxcmHome/containers/$1/temp-mount/$2"
+}
+
 function restore {
     #CONTAINER BACKUP
+    if ! -e [[ "$lxcmHome/containers/$1/backups/$2.sfs" ]]
+    then
+        echo "Backup does not exist."
+        exit 1
+    fi
     read -p "Create backup first? [Y/n] " confirm
     stop "$1"
     if ! [[ "$confirm" =~ (n|N) ]]
@@ -1097,7 +1130,6 @@ function restore {
     rm -r "$lxcmHome/containers/$1/scratchfs"
     cd "$lxcmHome/containers/$1/"
     sNum=$(cat "$lxcmHome/containers/$1/sNum")
-    chown "${sNum}00000:${sNum}00000" "$lxcmHome/containers/$1/scratchfs"
     mkdir "$lxcmHome/containers/$1/tmp"
     mkdir "$lxcmHome/containers/$1/tmp2"
     mount "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$1/tmp"
@@ -1127,6 +1159,8 @@ function force-restore {
 
 function delete {
     #CONTAINER BACKUP
+    umount "$lxcmHome/containers/$1/temp-mount/$2-unmerged" 2>/dev/null
+    umount "$lxcmHome/containers/$1/temp-mount/$2" 2>/dev/null
     rm "$lxcmHome/containers/$1/backups/$2.sfs"
 }
 
@@ -1323,6 +1357,7 @@ where ACTION is:
     scrub CONTAINER - Revert container to template.
     list-backups CONTAINER - List all backups for container.
     force-restore O-CONTAINER BACKUP D-CONTAINER - Restore backups from different containers!
+    inspect CONTAINER BACKUP - Mount a backup for analysis.
 
     Firewall policies have 6 commands:
         alias name ip, (can have multiple with commas)
