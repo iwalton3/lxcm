@@ -792,37 +792,37 @@ function fwappend {
         if [[ "$1" == "local" ]]
         then
             interface="lxc-bridge-nat"
-            chain="FORWARD"
+            chain="lxcm_forward"
             direction="i"
             sip="192.168.100.0/24"
         elif [[ "$1" == "out" ]]
         then
             interface="$iface"
-            chain="OUTPUT"
+            chain="lxcm_output"
             direction="o"
             cdir="i"
-            cchain="INPUT"
+            cchain="lxcm_input"
         elif [[ "$1" == "in" ]]
         then
             interface="$iface"
-            chain="INPUT"
+            chain="lxcm_input"
             direction="i"
             cdir="o"
-            cchain="OUTPUT"
+            cchain="lxcm_output"
         elif [[ "$1" == "inc" ]]
         then
             interface="$iface"
-            chain="FORWARD"
+            chain="lxcm_forward"
             direction="i"
             cdir="o"
-            cchain="FORWARD"
+            cchain="lxcm_forward"
         elif [[ "$1" == "outc" ]]
         then
             interface="$iface"
-            chain="FORWARD"
+            chain="lxcm_forward"
             direction="o"
             cdir="i"
-            cchain="FORWARD"
+            cchain="lxcm_forward"
         fi
         shift
         rule="-A $chain -$direction $interface"
@@ -855,7 +855,7 @@ function fwappend {
             crule="$crule $acrule -j ACCEPT"
         elif [[ "$1" == "deny" ]]
         then
-            rule="$rule -j LOG_AND_DROP"
+            rule="$rule -j lxcm_log_and_drop"
             applyCr="false"
         else
             echo "Bad Rule: $fullRule"
@@ -899,18 +899,20 @@ function fwappend {
 }
 
 function load-firewall {
-    iptables -F
     iptables -P INPUT DROP
     iptables -P OUTPUT DROP
     iptables -P FORWARD DROP
-    iptables -N LOG_AND_DROP 2>/dev/null
-    iptables -F LOG_AND_DROP
-    iptables -A LOG_AND_DROP -m limit --limit 5/min -j LOG --log-prefix "Denied: " --log-level 7
-    iptables -A LOG_AND_DROP -j DROP
-    iptables -A FORWARD -i "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A FORWARD -o "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables_diversion lxcm_input INPUT
+    iptables_diversion lxcm_output OUTPUT
+    iptables_diversion lxcm_forward FORWARD
+    iptables -N lxcm_log_and_drop 2>/dev/null
+    iptables -F lxcm_log_and_drop
+    iptables -A lxcm_log_and_drop -m limit --limit 5/min -j LOG --log-prefix "Denied: " --log-level 7
+    iptables -A lxcm_log_and_drop -j DROP
+    iptables -A lxcm_forward -i "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_forward -o "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_input -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_output -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     mkdir "/tmp/fwalias/"
     grep '^alias' "$1" | grep -v '^$\|^#' | while read -r policy
     do
@@ -1104,11 +1106,19 @@ function list-containers {
     ls "$lxcmHome/containers/"
 }
 
+function iptables_diversion {
+    #NAME CHAIN [type]
+    iptables $3 -N $1 2> /dev/null
+    iptables $3 -F $1
+    iptables $3 -D $2 -j $1 2> /dev/null
+    iptables $3 -A $2 -j $1
+}
+
 function update-port-forwards {
-    iptables -t nat -F PREROUTING
-    iptables -t nat -F OUTPUT
-    iptables -t nat -F POSTROUTING
-    iptables -t nat -A POSTROUTING -o $iface -j MASQUERADE
+    iptables_diversion lxcm_prerouting PREROUTING "-t nat"
+    iptables_diversion lxcm_output OUTPUT "-t nat"
+    iptables_diversion lxcm_postrouting POSTROUTING "-t nat"
+    iptables -t nat -A lxcm_postrouting -o $iface -j MASQUERADE
     sysctl -w net.ipv4.conf.all.route_localnet=1 &>/dev/null
     cat "$lxcmHome/forwards" | while read line
     do
@@ -1123,16 +1133,16 @@ function update-port-forwards {
             continue
         fi
         sNum=$(cat "$lxcmHome/containers/$container/sNum")
-        iptables -t nat -A OUTPUT -p "$protocol" -o "$iface" --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
-        iptables -t nat -A OUTPUT -p "$protocol" -o lo --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
+        iptables -t nat -A lxcm_output -p "$protocol" -o "$iface" --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
+        iptables -t nat -A lxcm_output -p "$protocol" -o lo --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
         if [[ "$mode" != "public" ]]
         then
-            iptables -t nat -A PREROUTING -p "$protocol" -i lxc-bridge-nat --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
-            iptables -t nat -A POSTROUTING -o lxc-bridge-nat -s 192.168.100.0/24 -p "$protocol" -m "$protocol" --dport "$hport" -j SNAT --to-source "$ip"
+            iptables -t nat -A lxcm_prerouting -p "$protocol" -i lxc-bridge-nat --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
+            iptables -t nat -A lxcm_postrouting -o lxc-bridge-nat -s 192.168.100.0/24 -p "$protocol" -m "$protocol" --dport "$hport" -j SNAT --to-source "$ip"
         fi
         if [[ "$mode" != "private" ]]
         then
-            iptables -t nat -A PREROUTING -p "$protocol" -i "$iface" --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
+            iptables -t nat -A lxcm_prerouting -p "$protocol" -i "$iface" --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
         fi
     done
 }
