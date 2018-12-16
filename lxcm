@@ -74,7 +74,7 @@ function lxcm_completion {
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
                list-forwards backup restore delete scrub list-backups force-restore
-               inspect' -- "$cur" ) )
+               inspect autostart service' -- "$cur" ) )
        else
            local args
            _count_args
@@ -146,6 +146,23 @@ function lxcm_completion {
                            ;;
                        4)
                            _lxcm_fs "${COMP_WORDS[2]}"
+                           ;;
+                       esac
+                   ;;
+               autostart)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           COMPREPLY=( $( compgen -W 'auto manual' -- "$cur" ) )
+                           ;;
+                       esac
+                   ;;
+               service)
+                   case $args in
+                       2)
+                           COMPREPLY=( $( compgen -W 'start stop' -- "$cur" ) )
                            ;;
                        esac
                    ;;
@@ -249,6 +266,20 @@ iface lxc-bridge-nat inet static
         echo -e "\n# Enable interfaces.d added by lxcm.\nsource /etc/network/interfaces.d/*\n" >> /etc/network/interfaces
     fi
     /etc/init.d/networking restart
+    echo "[Unit]
+Description=LXCM Container Autostart
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/lxcm service start
+RemainAfterExit=true
+ExecStop=/usr/bin/lxcm service stop
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
+    systemctl enable lxcm
     cat /etc/network/interfaces | grep iface | grep -v lxc-bridge-nat | grep -v ' lo ' | cut -d ' ' -f 2 | while read ifen
     do
         ifup "$ifen"
@@ -548,7 +579,7 @@ function restart {
 }
 
 function start {
-    #CONTAINER
+    #CONTAINER [bg]
     if ! [[ -e "$lxcmHome/containers/$1" ]]
     then
         echo "Container does not exist."
@@ -574,7 +605,15 @@ function start {
     fi
     if [[ -e "$lxcmHome/containers/$1/startup" ]]
     then
-        cat "$lxcmHome/containers/$1/startup" | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile
+        function runAutostart {
+            cat "$lxcmHome/containers/$1/startup" | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile
+        }
+        if [[ "$2" == "bg" ]]
+        then
+            runAutostart "$1" < /dev/null &>/dev/null &
+        else
+            runAutostart "$1"
+        fi
     fi
 }
 
@@ -643,6 +682,46 @@ function unmount-filesystem {
 function edit-startup {
     #CONTAINER
     $EDITOR "$lxcmHome/containers/$1/startup"
+}
+
+function autostart {
+    #CONTAINER manual/auto
+    if [[ "$2" == "auto" ]]
+    then
+        echo "auto" > "$lxcmHome/containers/$1/autostart"
+    else
+        rm "$lxcmHome/containers/$1/autostart"
+    fi
+}
+
+function service {
+    #start/stop
+    if [[ "$1" == "start" ]]
+    then
+        update-port-forwards
+        if [[ -f "$lxcmHome/firewall" ]]
+        then
+            fw reload
+        fi
+        ls "$lxcmHome/containers/" | while read -r container
+        do
+            if [[ -e "$lxcmHome/containers/$container/autostart" ]]
+            then
+                echo "Starting container $container..."
+                start "$container" bg
+            fi
+        done
+    elif [[ "$1" == "stop" ]]
+    then
+        ls "$lxcmHome/containers/" | while read -r container
+        do
+            if checkContainerStarted "$container"
+            then
+                echo "Stopping container $container..."
+                stop "$container"
+            fi
+        done
+    fi
 }
 
 function shell {
@@ -1223,8 +1302,8 @@ function listBox {
 }
 
 function yesNo {
-    #[question]
-    whiptail --title "lxcm interactive" --yesno "$1" 0 0
+    #[question] [--defaultno]
+    whiptail --title "lxcm interactive" --yesno "$1" 0 0 "$2"
     return $?
 }
 
@@ -1309,7 +1388,7 @@ function ez {
 
     if [[ "$creatingTemplate" == "true" ]]
     then
-        if yesNo "Would you like to compress this template?"
+        if yesNo "Would you like to compress this template?" --defaultno
         then
             compress "$template"
         fi
@@ -1320,9 +1399,14 @@ function ez {
     [[ "$template" == "" ]] && e "You didn't provide a name!"
     new "$template" "$ctname" || exit 1
 
-    if yesNo "Would you like to edit the container startup?"
+    if yesNo "Would you like to edit the container startup?" --defaultno
     then
         EDITOR=nano edit-startup "$ctname"
+    fi
+
+    if yesNo "Should the container automatically start with the system?" --defaultno
+    then                                        
+        autostart "$ctname" auto
     fi
 
     if yesNo "Would you like to start the container?"
@@ -1366,6 +1450,10 @@ where ACTION is:
     put CONTAINER LOCAL-PATH [CONTANER-PATH] - Copy file to container.
     destroy-container - Delete a container.
     list-containers - List all containers.
+
+    autostart CONTAINER manual/auto - Set startup setting.
+    service start - Load firewalls and start all autostart containers.
+    service stop - Stop all autostart containers.
 
     forward add tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Add a port forward.
     forward remove tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Delete a port forward.
