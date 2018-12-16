@@ -1101,7 +1101,7 @@ function backup {
 
 function inspect {
     #CONTAINER BACKUP
-    if ! -e [[ "$lxcmHome/containers/$1/backups/$2.sfs" ]]
+    if ! [[ -e "$lxcmHome/containers/$1/backups/$2.sfs" ]]
     then
         echo "Backup does not exist."
         exit 1
@@ -1117,7 +1117,7 @@ function inspect {
 
 function restore {
     #CONTAINER BACKUP
-    if ! -e [[ "$lxcmHome/containers/$1/backups/$2.sfs" ]]
+    if ! [[ -e "$lxcmHome/containers/$1/backups/$2.sfs" ]]
     then
         echo "Backup does not exist."
         exit 1
