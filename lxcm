@@ -267,6 +267,24 @@ function migrate {
     ssh "$1" tar -c --one-file-system / | tar -xv
 }
 
+function unsetPasswords {
+    #SHADOW-FILE
+    cat "$1" | sed 's/^\([^:]*\):\([^:]*\):\(.*\)$/\1\t\2\t\3/g' | while read -r line
+    do
+        {
+            read -rd $'\t' user
+            read -rd $'\t' password
+            read -r other
+        } <<< "$line"
+        if ! [[ "$password" =~ (\*|\!) ]]
+        then
+            password="!"
+        fi
+        echo "$user:$password:$other"
+    done > "$1.lxcm-temp"
+    mv "$1.lxcm-temp" "$1"
+}
+
 function template {
     #LXC-TEMPLATE TEMPLATE
     if [[ -e "$lxcmHome/templates/$1" || -e "$lxcmHome/templates/$1.sfs" ]]
@@ -275,6 +293,7 @@ function template {
         exit 1
     fi
     lxc-create -B dir -n lxcm-temp-create -t "$1" || exit 1
+    unsetPasswords /var/lib/lxc/lxcm-temp-create/rootfs/etc/shadow
     mv "/var/lib/lxc/lxcm-temp-create/rootfs" "$lxcmHome/templates/$2"
     mkdir "/var/lib/lxc/lxcm-temp-create/rootfs"
     lxc-destroy -n lxcm-temp-create
@@ -586,6 +605,7 @@ function clean {
     rm -f "/var/lib/lxc/$1/rootfs/root/.bash_login" &>/dev/null
     rm -f "/var/lib/lxc/$1/rootfs/root/.profile" &>/dev/null
     rm -f "/var/lib/lxc/$1/rootfs/etc/profile" &>/dev/null
+    unsetPasswords "/var/lib/lxc/$1/rootfs/etc/shadow"
     cat /etc/bash.bashrc > "/var/lib/lxc/$1/rootfs/etc/bash.bashrc"
     cat /etc/bash.bashrc | lxc-attach -n "$1" --clear-env -- /bin/bash --norc --noprofile -c 'cat > /root/.bashrc'
 }
