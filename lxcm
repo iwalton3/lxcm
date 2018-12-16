@@ -1034,7 +1034,7 @@ function update-port-forwards {
     cat "$lxcmHome/forwards" | while read line
     do
         protocol=$(cut -d: -f1 <<< "$line")
-        hport=$(cut -d: -f2 <<< "$line")
+        hport=$(cut -d: -f2 <<< "$line" | tr '-' ':')
         sport=$(cut -d: -f3 <<< "$line")
         container=$(cut -d: -f4 <<< "$line")
         mode=$(cut -d: -f5 <<< "$line")
