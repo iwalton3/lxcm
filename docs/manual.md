@@ -278,8 +278,8 @@ The put and get commands allow for file copies between the host system
 and the containers, managing all uid/gid shifts in the process:
 
 ```bash
-get CONTAINER CONTANER-PATH [LOCAL-PATH] - Copy file from container.
-put CONTAINER LOCAL-PATH [CONTANER-PATH] - Copy file to container.
+get CONTAINER CONTANER-PATH [LOCAL-PATH]
+put CONTAINER LOCAL-PATH [CONTANER-PATH]
 ```
 
 ### Managing Autostart
