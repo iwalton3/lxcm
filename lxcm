@@ -284,6 +284,10 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
     do
         ifup "$ifen"
     done
+    if [[ "$(lxc-create --version)" =~ ^3 ]]
+    then
+        apt install -y lxc-templates
+    fi
     type lxcm_completion | grep '^   ' > /etc/bash_completion.d/lxcm-completion.bash
 }
 
@@ -461,6 +465,33 @@ function findNextsNum {
     echo fail
 }
 
+function check-lxc-v3 {
+    #CONTAINER
+    if [[ "$(lxc-create --version)" =~ ^3 ]] && [[ ! -f "$lxcmHome/containers/$1/version-v3" ]]
+    then
+        echo "upgraded" > "$lxcmHome/containers/$1/version-v3"
+        sNum=$(cat "$lxcmHome/containers/$1/sNum")
+        echo "lxc.include = /usr/share/lxc/config/common.conf
+lxc.tty.max = 4
+lxc.uts.name = $1
+lxc.arch = amd64
+lxc.net.0.type = veth
+lxc.net.0.flags = up
+lxc.rootfs.path = /var/lib/lxc/$1/rootfs
+lxc.mount.entry = shm /dev/shm tmpfs defaults 0 0
+lxc.net.0.link = lxc-bridge-nat
+lxc.net.0.ipv4.address = 192.168.100.$sNum/24
+lxc.net.0.ipv4.gateway = 192.168.100.1
+lxc.include = /usr/share/lxc/config/userns.conf
+lxc.cgroup.pids.max = 5000
+limits.memory = 256MB
+limits.memory.enforce = soft
+limits.cpu.allowance = 20%
+lxc.idmap = u 0 ${sNum}00000 65536
+lxc.idmap = g 0 ${sNum}00000 65536" > "/var/lib/lxc/$1/config"
+    fi
+}
+
 function new {
     #TEMPLATE CONTAINER
     if [[ -e "$lxcmHome/containers/$2" ]]
@@ -512,6 +543,7 @@ limits.cpu.allowance = 20%
 lxc.id_map = u 0 ${sNum}00000 65536
 lxc.id_map = g 0 ${sNum}00000 65536" > "/var/lib/lxc/$2/config"
     setfacl -m u:${sNum}00000:x "/var/lib/lxc/$2/"
+    check-lxc-v3 "$2"
 }
 
 function mount-template {
@@ -592,6 +624,7 @@ function start {
     fi
     stop "$1"
     sNum=$(cat "$lxcmHome/containers/$1/sNum")
+    check-lxc-v3 "$1"
     update-port-forwards
     mount-filesystem "$1"
     lxc-start -n "$1"
