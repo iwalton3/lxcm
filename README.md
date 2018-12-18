@@ -4,7 +4,7 @@ Simplified container management system with shared compressed templates, backups
 
 ## Installation
 
-The install feature is built into the script and will install all needed dependencies on Debian systems.
+The install feature is built into the script and will install all needed dependencies on Debian systems. (All commands must be run as root.)
 
 ```bash
 ./lxcm install
