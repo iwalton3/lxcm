@@ -7,7 +7,9 @@ Simplified container management system with shared compressed templates, backups
 The install feature is built into the script and will install all needed dependencies on Debian systems. (All commands must be run as root.)
 
 ```bash
-./lxcm install
+git clone https://github.com/iwalton3/lxcm
+cd lxcm
+bash lxcm install
 ```
 
 To use lxcm on Ubuntu, these steps are also needed:
