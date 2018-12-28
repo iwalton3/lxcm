@@ -3,8 +3,8 @@
 import os
 import sys
 
-print("This will change owners all files in the current directory!")
-print("This can fix the uid/gid of files copied from containers.")
+print("This will change ownership on all files in the current directory!")
+print("This can fix the uid/gid of files wrongly copied from containers.")
 confirm = input("Continue? [y/N] ")
 if confirm not in ("y","Y","yes","Yes"):
     sys.exit(1)
@@ -24,3 +24,4 @@ for item in os.walk("."):
     unmap_ids(dir)
     for partial in files:
         unmap_ids(os.path.join(dir,partial))
+
