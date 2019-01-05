@@ -289,6 +289,17 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
         apt install -y lxc-templates
     fi
     type lxcm_completion | grep '^   ' > /etc/bash_completion.d/lxcm-completion.bash
+    if [[ ! -e ~/.bashrc || "$(grep -v '^$\|^#' ~/.bashrc | wc -l)" == "0" ]] && [[ -e "/etc/skel/.bashrc" ]]
+    then
+        echo "You appear to have an empty bash configuration."
+        read -p "Would you like to enable tab completion? [Y/n] " confirm
+        if ! [[ "$confirm" =~ (n|N) ]]
+        then
+            cp /etc/skel/.bashrc ~/.bashrc
+        fi
+    fi
+    echo "You will need to restart your shell to enable completion."
+    echo "Please type \"exec bash\"."
 }
 
 function migrate {
