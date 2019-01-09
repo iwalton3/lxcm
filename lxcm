@@ -74,7 +74,7 @@ function lxcm_completion {
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
                list-forwards backup restore delete scrub list-backups force-restore
-               inspect autostart service clear-passwords' -- "$cur" ) )
+               inspect autostart service clear-passwords move-forwards remove-forwards' -- "$cur" ) )
        else
            local args
            _count_args
@@ -106,7 +106,7 @@ function lxcm_completion {
                            ;;
                        esac
                    ;;
-               start|stop|restart|edit-startup|shell|safe-shell|clean|ipt|destroy-container|scrub|list-backups|clear-passwords)
+               start|stop|restart|edit-startup|shell|safe-shell|clean|ipt|destroy-container|scrub|list-backups|clear-passwords|remove-forwards)
                    case $args in
                        2)
                            _lxcm_container
@@ -185,6 +185,16 @@ function lxcm_completion {
                            ;;
                        7)
                            COMPREPLY=( $( compgen -W 'private public all' -- "$cur" ) )
+                           ;;
+                       esac
+                   ;;
+               move-forwards)
+                   case $args in
+                       2)
+                           _lxcm_container
+                           ;;
+                       3)
+                           _lxcm_container
                            ;;
                        esac
                    ;;
@@ -1239,6 +1249,38 @@ function list-forwards {
     cat "$lxcmHome/forwards" | tr ':' ' '
 }
 
+function move-forwards {
+    #OCONTAINER NCONTAINER
+    touch "$lxcmHome/forwards-upd"
+    cat "$lxcmHome/forwards" | while read -r forward
+    do
+        {
+            read -rd: protocol
+            read -rd: hport
+            read -rd: sport
+            read -rd: container
+            read -r mode
+        } <<< "$forward"
+        if [[ "$container" == "$1" ]]
+        then
+            container="$2"
+            if [[ "$3" == "DELETE_FORWARDS" ]]
+            then
+                continue
+            fi
+            echo "$protocol $hport $sport $container $mode"
+        fi
+        echo "$protocol:$hport:$sport:$container:$mode" >> "$lxcmHome/forwards-upd"
+    done
+    mv "$lxcmHome/forwards-upd" "$lxcmHome/forwards"
+    update-port-forwards
+}
+
+function remove-forwards {
+    #CONTAINER
+    move-forwards "$1" "" DELETE_FORWARDS
+}
+
 function backup {
     #CONTAINER BACKUP
     if [[ -e "$lxcmHome/containers/$1/backups/$2.sfs" ]]
@@ -1528,6 +1570,8 @@ where ACTION is:
     forward add tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Add a port forward.
     forward remove tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Delete a port forward.
     list-forwards - List all port forwards.
+    move-forwards OCONTAINER NCONTAINER - Switch all forwards from one container to another.
+    remove-forwards CONTAINER - Remove all forwards for a container.
 
     fw load FILE - Load firewall rules from file.
     fw save FILE - Save firewall rules to file.
