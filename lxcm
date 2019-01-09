@@ -653,6 +653,7 @@ function start {
     grep -vF '# added by lxcm' < "/var/lib/lxc/$1/rootfs/etc/hosts.bak-lxcm" > "/var/lib/lxc/$1/rootfs/etc/hosts"
     echo "127.0.0.1 $1 # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
     echo "127.0.0.1 $1.local # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
+    echo "$ip conthost # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
     rm "/var/lib/lxc/$1/rootfs/etc/hosts.bak-lxcm"
     lxc-start -n "$1"
     sleep 2
@@ -1184,6 +1185,9 @@ function iptables_diversion {
 }
 
 function update-port-forwards {
+    grep -vF "# added by lxcm" < /etc/hosts > /etc/hosts.bak-lxcm
+    mv /etc/hosts.bak-lxcm /etc/hosts
+    echo "$ip conthost # added by lxcm" >> /etc/hosts
     iptables_diversion lxcm_prerouting PREROUTING "-t nat"
     iptables_diversion lxcm_output OUTPUT "-t nat"
     iptables_diversion lxcm_postrouting POSTROUTING "-t nat"
