@@ -1203,7 +1203,7 @@ function update-port-forwards {
 
 function forward {
     #add/delete tcp/udp/both HPORT CPORT CONTAINER [private/public/all]
-    if ! [[ -e "$lxcmHome/containers/$5" || "$1" == "delete" ]]
+    if ! [[ -e "$lxcmHome/containers/$5" || "$1" == "remove" ]]
     then
         echo "Container does not exist."
         exit 1
