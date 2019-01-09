@@ -638,6 +638,7 @@ function start {
     check-lxc-v3 "$1"
     update-port-forwards
     mount-filesystem "$1"
+    echo "$1" > "/var/lib/lxc/$1/rootfs/etc/hostname"
     lxc-start -n "$1"
     sleep 2
     if [[ "$filterBetweenContainers" == "true" ]]
