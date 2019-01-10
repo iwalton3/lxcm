@@ -1444,6 +1444,14 @@ function checkForOld {
     fi
 }
 
+function ensure-template {
+    # [lxc-template] [template]
+    if [[ ! -e "$lxcmHome/templates/$1" ]] && [[ ! -e "$lxcmHome/templates/$1.sfs" ]]
+    then
+        template "$1" "$2"
+    fi
+}
+
 function ez-select-container {
     # Result will be stored in container variable.
     listBox "Please select a container to use as the basis for this template." \
