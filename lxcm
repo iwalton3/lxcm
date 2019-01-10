@@ -1444,20 +1444,40 @@ function checkForOld {
     fi
 }
 
-function ez {
-    listBox "Please select a template to use as the basis for the new container." \
-        $(list-templates | sed 's/\(.*\)/\1 Use_template_\1/g') \
-        "new" "Create from distribution template." \
-        "migrate" "Create from existing system via ssh." \
-        "compose" "Create from existing container." \
-        $(checkForOld) || exit 1
+function ez-select-container {
+    # Result will be stored in container variable.
+    listBox "Please select a container to use as the basis for this template." \
+        $(list-containers | sed 's/\(.*\)/\1 Use_container_\1/g') || return 1
+    container="$answer"
+}
+
+function ez-select-template {
+    # [new/existing]
+    # Result will be stored in template variable.
+    templateList=""
+    if [[ "$1" != "new" ]]
+    then
+        templateList="$(list-templates | sed 's/\(.*\)/\1 Use_template_\1/g')"
+    fi
+    if [[ "$1" == "existing" ]]
+    then
+        listBox "Please select a template to use as the basis for the new container." \
+            $templateList || return 1
+    else
+        listBox "Please select a template to use as the basis for the new container." \
+            $templateList \
+            "new" "Create from distribution template." \
+            "migrate" "Create from existing system via ssh." \
+            "compose" "Create from existing container." \
+            $(checkForOld) || return 1
+    fi
 
     creatingTemplate="false"
     template="$answer"
     if [[ "$answer" == "old" ]] && [[ ! -e "$lxcmHome/containers/old" ]]
     then
         creatingTemplate="true"
-        inputBox "Enter a name for the template." "old" || exit 1
+        inputBox "Enter a name for the template." "old" || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
         mv /old "$lxcmHome/containers/$template"
@@ -1469,36 +1489,35 @@ function ez {
             "ubuntu" "Install Ubuntu" \
             "centos" "Install CentOS" \
             "alpine" "Install Alpine" \
-            "oracle" "Install Oracle" || exit 1
+            "oracle" "Install Oracle" || return 1
         templateOS="$answer"
         if [[ "$templateOS" =~ (centos|oracle) ]] && ! which yum 2>/dev/null
         then
             echo "Installing yum to allow for template creation..."
-            apt install -y yum || exit 1
+            apt install -y yum || return 1
         fi
-        inputBox "Enter a name for the template." "$templateOS" || exit 1
+        inputBox "Enter a name for the template." "$templateOS" || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
-        template "$templateOS" "$template" || exit 1
+        template "$templateOS" "$template" || return 1
     elif [[ "$answer" == "migrate" ]]
     then
         creatingTemplate="true"
-        inputBox "Enter the ip address or hostname of the system. Root login is required." || exit 1
+        inputBox "Enter the ip address or hostname of the system. Root login is required." || return 1
         host="$answer"
-        inputBox "Enter a name for the template." || exit 1                  
+        inputBox "Enter a name for the template." || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
-        migrate "$host" "$template" || exit 1
+        migrate "$host" "$template" || return 1
     elif [[ "$answer" == "compose" ]]
     then
         creatingTemplate="true"
-        listBox "Please select a container to use as the basis for this template." \
-            $(list-containers | sed 's/\(.*\)/\1 Use_container_\1/g') || exit 1
-        templateSource="$answer"
-        inputBox "Enter a name for the template." "$templateSource-template" || exit 1
+        ez-select-container || return 1
+        templateSource="$container"
+        inputBox "Enter a name for the template." "$templateSource-template" || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
-        compose "$templateSource" "$template" || exit 1
+        compose "$templateSource" "$template" || return 1
     fi
 
     if [[ "$creatingTemplate" == "true" ]]
@@ -1508,10 +1527,13 @@ function ez {
             compress "$template"
         fi
     fi
+}
 
+function ez {
+    ez-select-template || exit 1
     inputBox "Enter a name for the container." || exit 1
     ctname="$answer"
-    [[ "$template" == "" ]] && e "You didn't provide a name!"
+    [[ "$ctname" == "" ]] && e "You didn't provide a name!"
     new "$template" "$ctname" || exit 1
 
     if yesNo "Would you like to edit the container startup?" --defaultno
