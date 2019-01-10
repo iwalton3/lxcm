@@ -1532,10 +1532,11 @@ function ez {
 
 action="$1"
 shift
-if [[ "$(type "$action")" =~ function ]]
+if [[ "$(type "$action" 2> /dev/null)" =~ function ]]
 then
     "$action" "$@"
-else
+elif [[ "$0" =~ lxcm$ ]]
+then
     echo "lxcm - Linux Container Management Frontend
 
 lxcm ACTION PARAMS...
