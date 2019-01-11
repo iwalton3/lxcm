@@ -74,7 +74,7 @@ function lxcm_completion {
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
                list-forwards backup restore delete scrub list-backups force-restore
-               inspect autostart service clear-passwords move-forwards remove-forwards' -- "$cur" ) )
+               inspect autostart service clear-passwords move-forwards remove-forwards clone' -- "$cur" ) )
        else
            local args
            _count_args
@@ -188,7 +188,7 @@ function lxcm_completion {
                            ;;
                        esac
                    ;;
-               move-forwards)
+               move-forwards|clone)
                    case $args in
                        2)
                            _lxcm_container
@@ -1332,17 +1332,20 @@ function inspect {
 }
 
 function restore {
-    #CONTAINER BACKUP
+    #CONTAINER BACKUP [nobackup]
     if ! [[ -e "$lxcmHome/containers/$1/backups/$2.sfs" ]]
     then
         echo "Backup does not exist."
         exit 1
     fi
-    read -p "Create backup first? [Y/n] " confirm
     stop "$1"
-    if ! [[ "$confirm" =~ (n|N) ]]
+    if [[ "$3" != "nobackup" ]]
     then
-        backup "$1" "$(date +%FT%T)-dirty"
+        read -p "Create backup first? [Y/n] " confirm
+        if ! [[ "$confirm" =~ (n|N) ]]
+        then
+            backup "$1" "$(date +%FT%T)-dirty"
+        fi
     fi
     rm -r "$lxcmHome/containers/$1/scratchfs"
     cd "$lxcmHome/containers/$1/"
@@ -1361,16 +1364,19 @@ function restore {
 }
 
 function force-restore {
-    #O-CONTAINER BACKUP D-CONTAINER
-    echo "WARNING: This operation is DANGEROUS!"
-    read -p "Are you sure? [y/N] " confirm
-    stop "$3"
-    if ! [[ "$confirm" =~ (y|Y) ]]
+    #O-CONTAINER BACKUP D-CONTAINER [noconfirm]
+    if [[ "$4" != "noconfirm" ]]
     then
-        exit
+        echo "WARNING: This operation is DANGEROUS!"
+        read -p "Are you sure? [y/N] " confirm
+        if ! [[ "$confirm" =~ (y|Y) ]]
+        then
+            exit
+        fi
     fi
+    stop "$3"
     ln -s "$lxcmHome/containers/$1/backups/$2.sfs" "$lxcmHome/containers/$3/backups/$2.sfs"
-    restore "$2" "$3"
+    restore "$3" "$2" nobackup
     rm "$lxcmHome/containers/$3/backups/$2.sfs"
 }
 
@@ -1450,6 +1456,14 @@ function ensure-template {
     then
         template "$1" "$2"
     fi
+}
+
+function clone {
+    # OCONTAINER NCONTAINER
+    backupName="clone-backup-$(date +%FT%T)"
+    backup "$1" "$backupName" || return 1
+    new "$(cat "$lxcmHome/containers/$1/template")" "$2" || return 1
+    force-restore "$1" "$backupName" "$2" noconfirm
 }
 
 function ez-select-container {
@@ -1593,6 +1607,7 @@ where ACTION is:
     clean CONTAINER - Remove un-needed functionality for increased security.
     clear-passwords - Remove all passwords from container. (May break user logins.)
     ipt CONTAINER PARAMS... - Execute iptables in container. (Changes don't persist.)
+    clone OCONTAINER NCONTAINER - Create a clone of a container.
     get CONTAINER CONTANER-PATH [LOCAL-PATH] - Copy file from container.
     put CONTAINER LOCAL-PATH [CONTANER-PATH] - Copy file to container.
     destroy-container - Delete a container.
