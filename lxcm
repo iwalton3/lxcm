@@ -805,6 +805,7 @@ function shell {
             start "$1"
         fi
     fi
+    unset PROMPT_COMMAND
     lxc-attach -n "$1"
 }
 
