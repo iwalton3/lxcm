@@ -344,7 +344,7 @@ function unsetPasswords {
 
 function template {
     #LXC-TEMPLATE TEMPLATE
-    if [[ -e "$lxcmHome/templates/$1" || -e "$lxcmHome/templates/$1.sfs" ]]
+    if [[ -e "$lxcmHome/templates/$2" || -e "$lxcmHome/templates/$2.sfs" ]]
     then
         echo "Template already exists."
         exit 1
