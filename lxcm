@@ -1084,7 +1084,7 @@ function get {
     fi
 
     filename=$(basename "$2")
-    cp -r "/var/lib/lxc/$1/rootfs/$2" "/var/lib/lxc/$1/rootfs/mnt/"
+    execute "$1" cp -r "/$2" "/mnt/"
     mv "$lxcmHome/containers/$1/mnt/$filename" "$copyTo" 
 }
 
