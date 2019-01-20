@@ -370,7 +370,7 @@ function compose {
     fi
     echo "Container must be stopped and left off while processing."
     read -p "Continue? [Y/n] " confirm
-    if [[ "$continue" =~ (n|N) ]]
+    if [[ "$confirm" =~ (n|N) ]]
     then
         exit 1
     fi
