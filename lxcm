@@ -184,7 +184,7 @@ function lxcm_completion {
                            _lxcm_container
                            ;;
                        7)
-                           COMPREPLY=( $( compgen -W 'private public all' -- "$cur" ) )
+                           COMPREPLY=( $( compgen -W 'private public host all' -- "$cur" ) )
                            ;;
                        esac
                    ;;
@@ -1209,12 +1209,12 @@ function update-port-forwards {
         sNum=$(cat "$lxcmHome/containers/$container/sNum")
         iptables -t nat -A lxcm_output -p "$protocol" -o "$iface" --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
         iptables -t nat -A lxcm_output -p "$protocol" -o lo --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
-        if [[ "$mode" != "public" ]]
+        if ! [[ "$mode" =~ (public|host) ]]
         then
             iptables -t nat -A lxcm_prerouting -p "$protocol" -i lxc-bridge-nat --dport "$hport" -j DNAT -d "$ip" --to-destination "192.168.100.$sNum:$sport"
             iptables -t nat -A lxcm_postrouting -o lxc-bridge-nat -s 192.168.100.0/24 -p "$protocol" -m "$protocol" --dport "$hport" -j SNAT --to-source "$ip"
         fi
-        if [[ "$mode" != "private" ]]
+        if ! [[ $mode =~ (private|host) ]]
         then
             iptables -t nat -A lxcm_prerouting -p "$protocol" -i "$iface" --dport "$hport" -j DNAT --to-destination "192.168.100.$sNum:$sport"
         fi
@@ -1618,8 +1618,8 @@ where ACTION is:
     service start - Load firewalls and start all autostart containers.
     service stop - Stop all autostart containers.
 
-    forward add tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Add a port forward.
-    forward remove tcp/udp/both HPORT CPORT CONTAINER [private/public/all] - Delete a port forward.
+    forward add tcp/udp/both HPORT CPORT CONTAINER [private/public/host/all] - Add a port forward.
+    forward remove tcp/udp/both HPORT CPORT CONTAINER [private/public/host/all] - Delete a port forward.
     list-forwards - List all port forwards.
     move-forwards OCONTAINER NCONTAINER - Switch all forwards from one container to another.
     remove-forwards CONTAINER - Remove all forwards for a container.
