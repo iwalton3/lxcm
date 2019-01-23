@@ -1229,7 +1229,7 @@ function forward {
         exit 1
     fi
     mode="$6"
-    if [[ ! "$6" =~ (private|public) ]]
+    if [[ ! "$6" =~ (private|public|host) ]]
     then
         mode="all"
     fi
