@@ -1503,7 +1503,7 @@ function ez-select-template {
         inputBox "Enter a name for the template." "old" || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
-        mv /old "$lxcmHome/containers/$template"
+        mv /old "$lxcmHome/templates/$template"
     elif [[ "$answer" == "new" ]]
     then
         creatingTemplate="true"
