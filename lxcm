@@ -74,7 +74,7 @@ function lxcm_completion {
                list-templates ez new start stop restart edit-startup shell safe-shell
                execute clean ipt get put destroy-container list-containers forward
                list-forwards backup restore delete scrub list-backups force-restore
-               inspect autostart service clear-passwords move-forwards remove-forwards clone' -- "$cur" ) )
+               inspect autostart service clear-passwords move-forwards remove-forwards clone fw' -- "$cur" ) )
        else
            local args
            _count_args
@@ -1036,6 +1036,7 @@ function fw {
     then
         if [[ "$2" == "yes" ]]
         then
+            touch "$lxcmHome/firewall"
             touch "$lxcmHome/firewall-exclusive"
             load-firewall "$lxcmHome/firewall"
         elif [[ "$2" == "no" ]]
