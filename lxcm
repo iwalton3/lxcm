@@ -201,12 +201,15 @@ function lxcm_completion {
                fw)
                    case $args in
                        2)
-                           COMPREPLY=( $( compgen -W 'load save edit append clear reload' -- "$cur" ) )
+                           COMPREPLY=( $( compgen -W 'load save edit append clear reload exclusive' -- "$cur" ) )
                            ;;
                        3)
                            if [[ "$prev" =~ (load|save) ]]
                            then
                                _filedir
+                           elif [[ "$prev" == "exclusive" ]]
+                           then
+                               COMPREPLY=( $( compgen -W 'yes no' -- "$cur" ) )
                            fi
                            ;;
                        esac
@@ -973,6 +976,10 @@ function load-firewall {
     iptables -P INPUT DROP
     iptables -P OUTPUT DROP
     iptables -P FORWARD DROP
+    if [[ -e "$lxcmHome/firewall-exclusive" ]]
+    then
+        iptables -F
+    fi
     iptables_diversion lxcm_input INPUT
     iptables_diversion lxcm_output OUTPUT
     iptables_diversion lxcm_forward FORWARD
@@ -1025,6 +1032,16 @@ function fw {
     elif [[ "$1" == "clear" ]]
     then
         > "$lxcmHome/firewall"
+    elif [[ "$1" == "exclusive" ]]
+    then
+        if [[ "$2" == "yes" ]]
+        then
+            touch "$lxcmHome/firewall-exclusive"
+            load-firewall "$lxcmHome/firewall"
+        elif [[ "$2" == "no" ]]
+        then
+            rm "$lxcmHome/firewall-exclusive"
+        fi
     fi
 }
 
@@ -1189,6 +1206,10 @@ function update-port-forwards {
     grep -vF "# added by lxcm" < /etc/hosts > /etc/hosts.bak-lxcm
     mv /etc/hosts.bak-lxcm /etc/hosts
     echo "$ip conthost # added by lxcm" >> /etc/hosts
+    if [[ -e "$lxcmHome/firewall-exclusive" ]]
+    then
+        iptables -t nat -F
+    fi
     iptables_diversion lxcm_prerouting PREROUTING "-t nat"
     iptables_diversion lxcm_output OUTPUT "-t nat"
     iptables_diversion lxcm_postrouting POSTROUTING "-t nat"
@@ -1630,6 +1651,7 @@ where ACTION is:
     fw append - Append rules to firewall. (Requires reload.)
     fw clear - Clear firewall. (Requires reload.)
     fw reload - Reload current firewall. Works after reboot.
+    fw exclusive yes/no - Set exclusive firewall mode.
 
     backup CONTAINER BACKUP - Backup the container.
     restore CONTAINER BACKUP - Restore a backup.
