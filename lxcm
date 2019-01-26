@@ -987,10 +987,14 @@ function load-firewall {
     iptables -F lxcm_log_and_drop
     iptables -A lxcm_log_and_drop -m limit --limit 5/min -j LOG --log-prefix "Denied: " --log-level 7
     iptables -A lxcm_log_and_drop -j DROP
-    iptables -A lxcm_forward -i "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A lxcm_forward -o "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A lxcm_input -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A lxcm_output -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_forward -i "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT ||
+        iptables -A lxcm_forward -i "$iface" -m state --state ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_forward -o "$iface" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT ||
+        iptables -A lxcm_forward -o "$iface" -m state --state ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_input -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT ||
+        iptables -A lxcm_input -m state --state ESTABLISHED,RELATED -j ACCEPT
+    iptables -A lxcm_output -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT ||
+        iptables -A lxcm_output -m state --state ESTABLISHED,RELATED -j ACCEPT
     mkdir "/tmp/fwalias/"
     grep '^alias' "$1" | grep -v '^$\|^#' | while read -r policy
     do
