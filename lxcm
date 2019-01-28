@@ -625,6 +625,7 @@ function mount-filesystem {
         chown "${sNum}00000:${sNum}00000" "/var/lib/lxc/$1/rootfs/extrafs"
     fi
     mount -o bind "$lxcmHome/containers/$1/extrafs" "/var/lib/lxc/$1/rootfs/extrafs"
+    chown "${sNum}00000:${sNum}00000" "/var/lib/lxc/$1/rootfs/extrafs"
     bindfs -o suid,dev,nonempty --uid-offset="${sNum}00000" --gid-offset="${sNum}00000" "$lxcmHome/containers/$1/mnt" "/var/lib/lxc/$1/rootfs/mnt"
 }
 
