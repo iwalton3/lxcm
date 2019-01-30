@@ -301,6 +301,7 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
     then
         apt install -y lxc-templates
     fi
+    chmod 755 /var/lib/lxc
     type lxcm_completion | grep '^   ' > /etc/bash_completion.d/lxcm-completion.bash
     if [[ ! -e ~/.bashrc || "$(grep -v '^$\|^#' ~/.bashrc | wc -l)" == "0" ]] && [[ -e "/etc/skel/.bashrc" ]]
     then

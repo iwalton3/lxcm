@@ -12,13 +12,6 @@ cd lxcm
 bash lxcm install
 ```
 
-To use lxcm on Ubuntu, these steps are also needed:
-
-```bash
-chmod 755 /var/lib/lxc
-echo ". /etc/bash_completion" >> ~/.bashrc
-```
-
 ## Basic Usage
 
 To create a new container using the wizard:
