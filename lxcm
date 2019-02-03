@@ -1089,7 +1089,7 @@ function put {
     fi
 
     filename=$(basename "$2")
-    cp -r "$2" "$lxcmHome/containers/$1/mnt/"
+    cp -rfa "$2" "$lxcmHome/containers/$1/mnt/"
     mv "/var/lib/lxc/$1/rootfs/mnt/$filename" "/var/lib/lxc/$1/rootfs/$copyTo"
 }
 
@@ -1108,7 +1108,7 @@ function get {
     fi
 
     filename=$(basename "$2")
-    execute "$1" cp -r "/$2" "/mnt/"
+    execute "$1" cp -rfa "/$2" "/mnt/"
     mv "$lxcmHome/containers/$1/mnt/$filename" "$copyTo" 
 }
 
