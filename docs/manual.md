@@ -33,21 +33,11 @@ bash lxcm install
 ```
 
 The script will automatically install all the dependencies and configure
-the system for managing containers.
-
-To use the system on Ubuntu, two additional commands are needed to allow
-containers to function and to get command completion:
+the system for managing containers. You need to restart your shell to get
+command completion:
 
 ```bash
-chmod 755 /var/lib/lxc
-echo ". /etc/bash_completion" >> ~/.bashrc
-```
-
-Regardless of which system you use, you need to restart your shell or
-enter this command to load the command completions:
-
-```bash
-. /etc/bash_completion
+exec bash
 ```
 
 # Getting Help
