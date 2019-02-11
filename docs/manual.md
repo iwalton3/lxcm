@@ -1,7 +1,7 @@
 # What is it?
 
 LXCM is a container management system for managing lxc containers. It
-was designed for make containers easy to use. It manages the underlying
+was designed to make containers easy to use. It manages the underlying
 configuration, filesystems, ip addresses, and user/group id mappings of
 the containers. It also includes a firewall manager for managing port
 forwards into containers and other access rules, with support for
