@@ -653,9 +653,9 @@ function start {
     check-lxc-v3 "$1"
     update-port-forwards
     mount-filesystem "$1"
+    echo "$1" > "/var/lib/lxc/$1/rootfs/etc/hostname"
     lxc-start -n "$1"
     sleep 2
-    echo "$1" > "/var/lib/lxc/$1/rootfs/etc/hostname"
     cp -a "/var/lib/lxc/$1/rootfs/etc/hosts" "/var/lib/lxc/$1/rootfs/etc/hosts.bak-lxcm"
     grep -vF '# added by lxcm' < "/var/lib/lxc/$1/rootfs/etc/hosts.bak-lxcm" > "/var/lib/lxc/$1/rootfs/etc/hosts"
     echo "127.0.0.1 $1 # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
