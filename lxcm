@@ -310,6 +310,10 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
         if ! [[ "$confirm" =~ (n|N) ]]
         then
             cp /etc/skel/.bashrc ~/.bashrc
+            if ! grep -q '^ *. /etc/bash_completion' ~/.bashrc
+            then
+                echo ". /etc/bash_completion" >> ~/.bashrc
+            fi
         fi
     fi
     echo "You will need to restart your shell to enable completion."
