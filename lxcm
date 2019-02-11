@@ -660,6 +660,7 @@ function start {
     echo "127.0.0.1 $1.local # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
     echo "$ip conthost # added by lxcm" >> "/var/lib/lxc/$1/rootfs/etc/hosts"
     rm "/var/lib/lxc/$1/rootfs/etc/hosts.bak-lxcm"
+    cat /etc/localtime > "/var/lib/lxc/$1/rootfs/etc/localtime"
     lxc-start -n "$1"
     sleep 2
     if [[ "$filterBetweenContainers" == "true" ]]
