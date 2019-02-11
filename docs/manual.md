@@ -300,7 +300,8 @@ be created. The port forwards have three modes:
 1.  private – The service is available to other containers only.
 2.  public – The service is available to other servers on the network
     only.
-3.  both – The service is available everywhere.
+3.  host – The service is only available to the host system.
+4.  both – The service is available everywhere.
 
 Regardless of which option is selected, the services are always
 available from the host the containers are running on if any port
