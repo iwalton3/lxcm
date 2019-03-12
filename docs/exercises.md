@@ -8,7 +8,7 @@ This document lists exercises you can do to familiarize yourself with `lxcm`. Un
 
 Using the `lxcm ez` wizard feature, create a new container called "debiantest" based off the `debian` template. The wizard will handle creation of the `debian` template.
 
-### 1.1.3 Create a CentOS Template (Command Line)
+### 1.1.2 Create a CentOS Template (Command Line)
 
 Without using the wizard, create a new `centos` template.
 
