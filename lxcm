@@ -255,10 +255,13 @@ function lxcm_completion {
 }
 
 function install {
-    cp "$scriptName" /usr/bin/lxcm
-    chmod 755 /usr/bin/lxcm
-    chown root:root /usr/bin/lxcm
-    apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim whiptail bash-completion
+    if [[ "$1" != "postinst" ]]
+    then
+        cp "$scriptName" /usr/bin/lxcm
+        chmod 755 /usr/bin/lxcm
+        chown root:root /usr/bin/lxcm
+        apt install -y acl squashfs-tools lxc unionfs-fuse bindfs vim whiptail bash-completion
+    fi
     mkdir -p "$lxcmHome/templates/"
     chmod 700 "$lxcmHome"
     mkdir -p "$lxcmHome/containers/"
@@ -297,7 +300,7 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
     do
         ifup "$ifen"
     done
-    if [[ "$(lxc-create --version)" =~ ^3 ]]
+    if [[ "$(lxc-create --version)" =~ ^3 ]] && [[ "$1" != "postinst" ]]
     then
         apt install -y lxc-templates
     fi
