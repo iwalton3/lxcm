@@ -1,0 +1,20 @@
+Package: lxcm
+Version: 1.1
+Priority: optional
+Section: main
+Depends: acl, squashfs-tools, lxc, unionfs-fuse, bindfs, whiptail
+Recommends: bash-completion, lxc-templates, yum, vim
+Maintainer: Ian Walton <iwalton3@gmail.com>
+Architecture: all
+Description: Container and firewall manager.
+ Simplified container management system with shared compressed
+ templates, backups, firewall management, and secure defaults.
+   - Install in minutes with zero configuration.
+   - Containers run as regular users.
+   - Compressed templates allow similar containers to share disk space.
+   - Configure port forwards with simple commands while containers run.
+   - Configure iptables using simple configuration directives.
+   - Migrate existing systems over the network via ssh to containers.
+   - Integrated shell completion makes the utility fast to use.
+   - Documentation and tutorials make the system easy to learn.
+

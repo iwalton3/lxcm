@@ -1,0 +1,7 @@
+lxcm (1.0.1) unstable; urgency=medium
+
+ * Correct lintian issues with previous packaged version.
+ * Add license, changelog, and fix ownership information.
+
+ -- Ian Walton <iwalton3@gmail.com> Tue, 19 Mar 2019 01:31:58 -0400
+
