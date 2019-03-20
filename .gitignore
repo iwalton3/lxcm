@@ -1,3 +1,8 @@
 dist
 build
 srcbuild
+debian/lxcm/
+debian/debhelper-build-stamp
+debian/files
+debian/lxcm.substvars
+debian/.debhelper/
