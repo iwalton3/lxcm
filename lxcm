@@ -360,6 +360,11 @@ function template {
         echo "Template already exists."
         exit 1
     fi
+    if [[ "$1" =~ (centos|oracle) ]] && ! which yum 2>/dev/null
+    then
+        echo "Installing yum to allow for template creation..."
+        apt install -y yum || return 1
+    fi
     lxc-create -B dir -n lxcm-temp-create -t "$1" || exit 1
     unsetPasswords /var/lib/lxc/lxcm-temp-create/rootfs/etc/shadow
     mv "/var/lib/lxc/lxcm-temp-create/rootfs" "$lxcmHome/templates/$2"
@@ -1551,11 +1556,6 @@ function ez-select-template {
             "alpine" "Install Alpine" \
             "oracle" "Install Oracle" || return 1
         templateOS="$answer"
-        if [[ "$templateOS" =~ (centos|oracle) ]] && ! which yum 2>/dev/null
-        then
-            echo "Installing yum to allow for template creation..."
-            apt install -y yum || return 1
-        fi
         inputBox "Enter a name for the template." "$templateOS" || return 1
         template="$answer"
         [[ "$template" == "" ]] && e "You didn't provide a name!"
