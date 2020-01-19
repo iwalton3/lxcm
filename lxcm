@@ -305,7 +305,15 @@ WantedBy=multi-user.target" > /etc/systemd/system/lxcm.service
         apt install -y lxc-templates
     fi
     chmod 755 /var/lib/lxc
-    type lxcm_completion | grep '^   ' > /etc/bash_completion.d/lxcm-completion.bash
+    completion_file="$HOME/lxcm-completion"
+    if [[ -e /etc/bash_completion.d/ ]]
+    then
+        completion_file="/etc/bash_completion.d/lxcm-completion.bash"
+    elif [[ -e /usr/share/bash-completion/completions/ ]]
+    then
+        completion_file="/usr/share/bash-completion/completions/lxcm"
+    fi
+    type lxcm_completion | grep '^   ' > "$completion_file"
     if [[ ! -e ~/.bashrc || "$(grep -v '^$\|^#' ~/.bashrc | wc -l)" == "0" ]] && [[ -e "/etc/skel/.bashrc" ]]
     then
         echo "You appear to have an empty bash configuration."
