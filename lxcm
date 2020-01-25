@@ -1547,7 +1547,7 @@ function ez-select-template {
 
     creatingTemplate="false"
     template="$answer"
-    if [[ "$answer" == "old" ]] && [[ ! -e "$lxcmHome/containers/old" && ! -e "$lxcmHome/containers/old.sfs" ]]
+    if [[ "$answer" == "old" ]] && [[ ! -e "$lxcmHome/templates/old" && ! -e "$lxcmHome/templates/old.sfs" ]]
     then
         creatingTemplate="true"
         inputBox "Enter a name for the template." "old" || return 1
